@@ -3888,7 +3888,7 @@ local function abortBattle(player, reason, silent)
 	if not b or b.finishing then return end
 	b.active = false
 	b.log = reason or "Defaite... Combat interrompu."
-	if not silent then sendBattleUpdate(player) end
+	sendBattleUpdate(player) -- toujours : l'interface du client se ferme sur cet etat final
 	finishBattle(player, b, silent and 0 or 1.5)
 end
 
