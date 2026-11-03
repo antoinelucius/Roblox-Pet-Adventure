@@ -2666,6 +2666,7 @@ local function collectCrystal(info, player, byPet)
 	if info.busy then return end
 	local s = states[player.UserId]
 	if not s then return end
+	if (s.unlockedWorld or 1) < info.world then return end -- la position du personnage n'autorise pas le gain
 	info.busy = true
 	local mult = 1 + (s.rebirthLevel or 0) * 0.5
 	local petBonus = 1
@@ -4531,7 +4532,7 @@ task.spawn(function()
 			local hrp = char and char:FindFirstChild("HumanoidRootPart")
 			if s and hrp and not battles[player.UserId] then
 				local w = worldOfPosition(hrp.Position)
-				if w then
+				if w and w <= (s.unlockedWorld or 1) then
 					local used = {}
 					for _, pet in ipairs(getEquippedPets(s)) do
 						local best, bd = nil, 40
@@ -5655,6 +5656,10 @@ do
 		if not hrp or not hum or hum.Health <= 0 then return end
 		if (hrp.Position - info.anchor.Position).Magnitude > 30 then return end
 		if worldOfPosition(hrp.Position) ~= info.world then return end
+		if (s.unlockedWorld or 1) < info.world then
+			notify(player, "Debloque d'abord ce monde pour t'entrainer ici !", RED)
+			return
+		end
 
 		local pets = getEquippedPets(s)
 		if #pets == 0 then
@@ -5742,6 +5747,10 @@ do
 					info.sub.Text = "Entrainement... prochain gain dans " .. math.max(0, math.ceil(untilTick)) .. " s"
 					if now - lastTick >= TRAIN_TIME then
 						lastTick = now
+						if (s.unlockedWorld or 1) < worldN then
+							reason = "Monde non debloque : entrainement arrete"
+							break
+						end
 						local gain = TRAIN_XP[worldN]
 						local levelUps = {}
 						for _, pet in ipairs(pets) do
