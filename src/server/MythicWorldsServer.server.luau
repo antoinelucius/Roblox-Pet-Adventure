@@ -1307,7 +1307,7 @@ end
 -- dans UpdateAsync). Une session perimee ne peut plus ecrire, et les ecritures d'un joueur passent
 -- une par une, avec un instantane pris au moment d'ecrire : une ancienne sauvegarde n'en ecrase pas une recente.
 local Saves = {
-	meta = setmetatable({}, { __mode = "k" }), -- etat du joueur -> { session, version, released, lost }
+	meta = setmetatable({}, { __mode = "k" }), -- etat du joueur -> { session, version, saved (recus durables), released, lost }
 	busy = {},                                 -- UserId -> ecriture en cours
 	LOCK_TTL = 180,                            -- verrou perime apres 3 min sans sauvegarde (serveur plante)
 }
@@ -1368,7 +1368,7 @@ function Saves.snapshot(s)
 		unlockedWorld = s.unlockedWorld, nextPetId = s.nextPetId,
 		speedBoostUntil = s.speedBoostUntil or 0,
 		luckUntil = s.luckUntil or 0, luckMult = s.luckMult or 1,
-		receipts = s.receipts or {}, bought = s.bought or {},
+		receipts = table.clone(s.receipts or {}), bought = s.bought or {},
 		tut = s.tut, tutProg = s.tutProg, dex = s.dex, dexClaimed = s.dexClaimed, daily = s.daily, quests = s.quests,
 		auraColor = s.auraColor,
 		lastSeen = os.time(),
@@ -1392,7 +1392,6 @@ local function loadPlayer(player)
 	-- un nouveau joueur n'a que le verrou dans son profil
 	local s = (data and data.coins ~= nil) and data or newState()
 	s.sessionId, s.sessionLockAt, s.saveVersion = nil, nil, nil
-	if session then Saves.meta[s] = { session = session, version = version } end
 	-- Valide les donnees sauvegardees avant de les utiliser (migration / donnees corrompues).
 	if type(s.pets) ~= "table" then s.pets = {} end
 	if type(s.equipped) ~= "table" then s.equipped = {} end
@@ -1404,6 +1403,11 @@ local function loadPlayer(player)
 	s.luckUntil = finiteNumber(s.luckUntil, 0, 0)
 	s.luckMult = finiteNumber(s.luckMult, 1, 1, 10)
 	if type(s.receipts) ~= "table" then s.receipts = {} end
+	if session then
+		local saved = {}
+		for _, rid in ipairs(s.receipts) do saved[rid] = true end
+		Saves.meta[s] = { session = session, version = version, saved = saved }
+	end
 	if type(s.bought) ~= "table" then s.bought = {} end
 	if type(s.auraColor) ~= "string" then s.auraColor = "auto" end
 	local cleanPets, ownedIds, maxId = {}, {}, 0
@@ -1504,7 +1508,11 @@ local function savePlayer(player, final)
 				written = true
 				return snapshot
 			end)
-			if written then meta.version = snapshot.saveVersion end
+			if written then
+				meta.version = snapshot.saveVersion
+				meta.saved = {}
+				for _, rid in ipairs(snapshot.receipts) do meta.saved[rid] = true end
+			end
 		end)
 		if (ok and written) or lost then break end
 		if attempt < 3 then task.wait(1.5 * attempt) end
@@ -4486,27 +4494,36 @@ do
 		local s = states[player.UserId]
 		if not s then return Enum.ProductPurchaseDecision.NotProcessedYet end
 		local rid = tostring(receipt.PurchaseId)
-		for _, done in ipairs(s.receipts) do
-			if done == rid then return Enum.ProductPurchaseDecision.PurchaseGranted end
+		local function durable()
+			local meta = Saves.meta[s]
+			return meta ~= nil and meta.saved[rid] == true
 		end
-		local item = byProduct[receipt.ProductId]
-		if not item then
-			warn("[MWS] Produit inconnu dans MWS_ShopConfig : " .. tostring(receipt.ProductId))
-			return Enum.ProductPurchaseDecision.NotProcessedYet
+		-- recu deja en memoire : la recompense est donnee, il reste seulement a la rendre durable
+		if not table.find(s.receipts, rid) then
+			local item = byProduct[receipt.ProductId]
+			if not item then
+				warn("[MWS] Produit inconnu dans MWS_ShopConfig : " .. tostring(receipt.ProductId))
+				return Enum.ProductPurchaseDecision.NotProcessedYet
+			end
+			if not grantReward(player, s, item) then
+				notify(player, "Achat impossible (inventaire plein ?). Tu ne seras pas debite.", Color3.fromRGB(255, 120, 120))
+				return Enum.ProductPurchaseDecision.NotProcessedYet
+			end
+			if item.limit then s.bought[item.key] = (s.bought[item.key] or 0) + 1 end
+			table.insert(s.receipts, rid)
+			while #s.receipts > 100 do table.remove(s.receipts, 1) end
+			sendState(player)
+			refreshPetVisuals(player)
+			notify(player, "Merci ! " .. item.name .. " ajoute !", Color3.fromRGB(120, 255, 180))
+			task.spawn(sendShopInfo, player)
 		end
-		if not grantReward(player, s, item) then
-			notify(player, "Achat impossible (inventaire plein ?). Tu ne seras pas debite.", Color3.fromRGB(255, 120, 120))
-			return Enum.ProductPurchaseDecision.NotProcessedYet
+		-- Roblox ne doit considerer l'achat livre qu'une fois recompense + recu sauvegardes ensemble.
+		-- Sinon il repropose ce recu : a la reconnexion, un recu non sauvegarde redonne la recompense perdue.
+		if durable() or (savePlayer(player) and durable()) then
+			return Enum.ProductPurchaseDecision.PurchaseGranted
 		end
-		if item.limit then s.bought[item.key] = (s.bought[item.key] or 0) + 1 end
-		table.insert(s.receipts, rid)
-		while #s.receipts > 100 do table.remove(s.receipts, 1) end
-		savePlayer(player)
-		sendState(player)
-		refreshPetVisuals(player)
-		notify(player, "Merci ! " .. item.name .. " ajoute !", Color3.fromRGB(120, 255, 180))
-		task.spawn(sendShopInfo, player)
-		return Enum.ProductPurchaseDecision.PurchaseGranted
+		warn("[MWS] Achat non sauvegarde pour " .. player.UserId .. " : recu " .. rid .. " en attente")
+		return Enum.ProductPurchaseDecision.NotProcessedYet
 	end
 
 	-- achats de passes
