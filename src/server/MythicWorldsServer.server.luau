@@ -2361,11 +2361,15 @@ end
 -- arrive avant que le sol soit charge chez lui et tombe dans le vide.
 local teleporting = {}
 
-local function safeTeleport(player, targetCF)
-	local waited = 0
-	while teleporting[player] and waited < 10 do
-		task.wait(0.05)
-		waited = waited + 0.05
+-- Une seule teleportation a la fois par joueur : le verrou n'est jamais franchi.
+-- waitTurn = true (retour d'arene) : attend la fin de celle en cours ; sinon la demande est refusee.
+local function safeTeleport(player, targetCF, waitTurn)
+	if teleporting[player] then
+		if not waitTurn then return false end
+		while teleporting[player] and player.Parent do
+			task.wait(0.05)
+		end
+		if not player.Parent then return false end
 	end
 	local char = player.Character
 	local hrp = char and char:FindFirstChild("HumanoidRootPart")
@@ -2406,6 +2410,7 @@ end
 local function usePortal(player, target)
 	local s = states[player.UserId]
 	if not s then return end
+	if teleporting[player] then return end -- avant tout paiement : rien ne cede entre ce test et le depart
 	if _G.MWS_TutLock and _G.MWS_TutLock(player, "portal", target) then return end
 	if battles[player.UserId] then
 		notify(player, "Termine ton combat avant de voyager !", Color3.fromRGB(255, 120, 120))
@@ -3736,7 +3741,7 @@ local function returnPlayerFromArena(player, b)
 	local target = b.originalCFrame
 	task.spawn(function()
 		if target and player.Parent and player.Character then
-			safeTeleport(player, target)
+			safeTeleport(player, target, true)
 		end
 		cleanupArena(b)
 		if player.Parent then refreshPetVisuals(player) end
@@ -4020,6 +4025,7 @@ end
 startBattle = function(player, npcIndex)
 	local s = states[player.UserId]
 	if not s then return end
+	if teleporting[player] then return end
 	if battles[player.UserId] then
 
 		-- Combat deja en cours : on resynchronise l'interface au lieu de planter
@@ -4095,8 +4101,12 @@ startBattle = function(player, npcIndex)
 	-- les pets qui suivent le joueur sont caches pendant le combat (ils bouchaient la vue)
 	clearPlayerVisuals(player)
 	local pPos = arena.origin + V3(-19, 4, 0)
-	safeTeleport(player, CFrame.lookAt(pPos, pPos + V3(1, 0, 0)))
+	local arrived = safeTeleport(player, CFrame.lookAt(pPos, pPos + V3(1, 0, 0)))
 	if not player.Parent or battles[player.UserId] ~= b then return end
+	if not arrived then
+		abortBattle(player, "Defaite... Combat interrompu.", true)
+		return
+	end
 
 	updateArenaVisuals(b)
 	BattleStart:FireClient(player, battlePayload(b))
@@ -4200,7 +4210,11 @@ SetAuraColor.OnServerEvent:Connect(function(player, key)
 	sendState(player)
 end)
 
+local worldTeleportAt = {}
 WorldTeleport.OnServerEvent:Connect(function(player, w)
+	local now = os.clock()
+	if worldTeleportAt[player.UserId] and now - worldTeleportAt[player.UserId] < 1 then return end
+	worldTeleportAt[player.UserId] = now
 	local s = states[player.UserId]
 	if not s or type(w) ~= "number" then return end
 	w = math.floor(w)
@@ -4627,6 +4641,7 @@ Players.PlayerRemoving:Connect(function(player)
 	battleActionAt[player.UserId] = nil
 	speedBuyAt[player.UserId] = nil
 	battleRequestAt[player.UserId] = nil
+	worldTeleportAt[player.UserId] = nil
 	teleporting[player] = nil
 end)
 
