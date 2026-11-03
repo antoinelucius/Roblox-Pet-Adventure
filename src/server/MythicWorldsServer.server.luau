@@ -1303,32 +1303,96 @@ local function finiteNumber(value, fallback, minimum, maximum)
 	return value
 end
 
+-- Sauvegardes : chaque session possede le profil du joueur (verrou + numero de version verifies
+-- dans UpdateAsync). Une session perimee ne peut plus ecrire, et les ecritures d'un joueur passent
+-- une par une, avec un instantane pris au moment d'ecrire : une ancienne sauvegarde n'en ecrase pas une recente.
+local Saves = {
+	meta = setmetatable({}, { __mode = "k" }), -- etat du joueur -> { session, version, released, lost }
+	busy = {},                                 -- UserId -> ecriture en cours
+	LOCK_TTL = 180,                            -- verrou perime apres 3 min sans sauvegarde (serveur plante)
+}
+
+-- Prend le verrou du profil et renvoie (donnees, session, version). Renvoie nil si le profil
+-- reste verrouille ou illisible : on ne cree alors PAS de sauvegarde vide.
+function Saves.claim(player)
+	local session = game:GetService("HttpService"):GenerateGUID(false)
+	for attempt = 1, 10 do
+		local data, locked
+		local ok, err = pcall(function()
+			_G.MWS_Store:UpdateAsync("player_" .. player.UserId, function(current)
+				data, locked = nil, false
+				if type(current) ~= "table" then current = {} end
+				if current.sessionId and os.time() - finiteNumber(current.sessionLockAt, 0, 0) < Saves.LOCK_TTL then
+					locked = true
+					return nil
+				end
+				current.sessionId = session
+				current.sessionLockAt = os.time()
+				current.saveVersion = finiteNumber(current.saveVersion, 0, 0) + 1
+				data = current
+				return current
+			end)
+		end)
+		if ok and data then return data, session, data.saveVersion end
+		if not ok then
+			warn("[MWS] Echec de chargement (essai " .. attempt .. ") pour " .. player.UserId .. ": " .. tostring(err))
+		end
+		if not player.Parent then return nil end
+		task.wait(3)
+	end
+	return nil
+end
+
+-- Rend le verrou d'un joueur parti pendant son chargement
+function Saves.release(player, session)
+	pcall(function()
+		_G.MWS_Store:UpdateAsync("player_" .. player.UserId, function(current)
+			if type(current) ~= "table" or current.sessionId ~= session then return nil end
+			current.sessionId = nil
+			return current
+		end)
+	end)
+end
+
+-- Uniquement les champs persistants, pas les objets Roblox temporaires.
+function Saves.snapshot(s)
+	local petsCopy, equippedCopy, defeatedCopy = {}, {}, {}
+	for i, pet in ipairs(s.pets) do
+		petsCopy[i] = { id = pet.id, name = pet.name, rarity = pet.rarity, color = pet.color, multiplier = pet.multiplier, income = pet.income, tier = pet.tier or 0, lvl = pet.lvl or 0, xp = pet.xp or 0, size = pet.size, mutation = pet.mutation }
+	end
+	for i, id in ipairs(s.equipped) do equippedCopy[i] = id end
+	for i, id in ipairs(s.defeatedNPCs) do defeatedCopy[i] = id end
+	return {
+		coins = s.coins, pets = petsCopy, equipped = equippedCopy,
+		defeatedNPCs = defeatedCopy, rebirthLevel = s.rebirthLevel,
+		unlockedWorld = s.unlockedWorld, nextPetId = s.nextPetId,
+		speedBoostUntil = s.speedBoostUntil or 0,
+		luckUntil = s.luckUntil or 0, luckMult = s.luckMult or 1,
+		receipts = s.receipts or {}, bought = s.bought or {},
+		tut = s.tut, tutProg = s.tutProg, dex = s.dex, dexClaimed = s.dexClaimed, daily = s.daily, quests = s.quests,
+		auraColor = s.auraColor,
+		lastSeen = os.time(),
+	}
+end
+
 local OFFLINE_RATE, OFFLINE_MAX = 0.25, 8 * 3600
 local function loadPlayer(player)
-	local data
+	local data, session, version
 	if datastoreAvailable then
-		-- plusieurs essais ; si le chargement echoue vraiment, on ne cree PAS une sauvegarde vide
-		-- (elle ecraserait la vraie progression au prochain enregistrement)
-		local loaded = false
-		for attempt = 1, 4 do
-			local ok, result = pcall(function()
-				return _G.MWS_Store:GetAsync("player_" .. player.UserId)
-			end)
-			if ok then
-				loaded = true
-				if type(result) == "table" then data = result end
-				break
-			end
-			warn("[MWS] Echec de chargement (essai " .. attempt .. ") pour " .. player.UserId .. ": " .. tostring(result))
-			if not player.Parent then return end
-			task.wait(attempt * 1.5)
-		end
-		if not loaded then
+		data, session, version = Saves.claim(player)
+		if not data then
 			if player.Parent then player:Kick("Impossible de charger ta sauvegarde. Reconnecte-toi dans un instant !") end
 			return
 		end
+		if not player.Parent then
+			Saves.release(player, session)
+			return
+		end
 	end
-	local s = data or newState()
+	-- un nouveau joueur n'a que le verrou dans son profil
+	local s = (data and data.coins ~= nil) and data or newState()
+	s.sessionId, s.sessionLockAt, s.saveVersion = nil, nil, nil
+	if session then Saves.meta[s] = { session = session, version = version } end
 	-- Valide les donnees sauvegardees avant de les utiliser (migration / donnees corrompues).
 	if type(s.pets) ~= "table" then s.pets = {} end
 	if type(s.equipped) ~= "table" then s.equipped = {} end
@@ -1407,38 +1471,57 @@ local function loadPlayer(player)
 	sendWorldInfo(player)
 end
 
-local function savePlayer(player)
-	local s = states[player.UserId]
-	if not s or not datastoreAvailable then return end
-	-- Sauvegarde uniquement les champs persistants, pas les objets Roblox temporaires.
-	local petsCopy, equippedCopy, defeatedCopy = {}, {}, {}
-	for i, pet in ipairs(s.pets) do
-		petsCopy[i] = { id = pet.id, name = pet.name, rarity = pet.rarity, color = pet.color, multiplier = pet.multiplier, income = pet.income, tier = pet.tier or 0, lvl = pet.lvl or 0, xp = pet.xp or 0, size = pet.size, mutation = pet.mutation }
+-- Renvoie true seulement si l'ecriture est durable. final = true : rend aussi le verrou du profil.
+local function savePlayer(player, final)
+	local uid = player.UserId
+	local s = states[uid]
+	if not s or not datastoreAvailable then return false end
+	local meta = Saves.meta[s]
+	if not meta then return false end
+	while Saves.busy[uid] do
+		task.wait(0.05)
 	end
-	for i, id in ipairs(s.equipped) do equippedCopy[i] = id end
-	for i, id in ipairs(s.defeatedNPCs) do defeatedCopy[i] = id end
-	local snapshot = {
-		coins = s.coins, pets = petsCopy, equipped = equippedCopy,
-		defeatedNPCs = defeatedCopy, rebirthLevel = s.rebirthLevel,
-		unlockedWorld = s.unlockedWorld, nextPetId = s.nextPetId,
-		speedBoostUntil = s.speedBoostUntil or 0,
-		luckUntil = s.luckUntil or 0, luckMult = s.luckMult or 1,
-		receipts = s.receipts or {}, bought = s.bought or {},
-		tut = s.tut, tutProg = s.tutProg, dex = s.dex, dexClaimed = s.dexClaimed, daily = s.daily, quests = s.quests,
-		auraColor = s.auraColor,
-		lastSeen = os.time(),
-	}
-	local ok, err
+	if meta.released then return true end
+	if meta.lost then return false end
+	Saves.busy[uid] = true
+	local ok, err, written, lost
 	for attempt = 1, 3 do
 		ok, err = pcall(function()
-			_G.MWS_Store:UpdateAsync("player_" .. player.UserId, function()
+			local snapshot = Saves.snapshot(s) -- pris apres l'attente : toujours l'etat le plus recent
+			_G.MWS_Store:UpdateAsync("player_" .. uid, function(current)
+				written, lost = false, false
+				local stored = 0
+				if type(current) == "table" then
+					stored = finiteNumber(current.saveVersion, 0, 0)
+					if current.sessionId ~= meta.session and (current.sessionId ~= nil or stored > meta.version) then
+						lost = true
+						return nil
+					end
+				end
+				snapshot.sessionId = not final and meta.session or nil
+				snapshot.sessionLockAt = os.time()
+				snapshot.saveVersion = math.max(stored, meta.version) + 1
+				written = true
 				return snapshot
 			end)
+			if written then meta.version = snapshot.saveVersion end
 		end)
-		if ok then break end
+		if (ok and written) or lost then break end
 		if attempt < 3 then task.wait(1.5 * attempt) end
 	end
-	if not ok then warn("[MWS] Echec de sauvegarde pour " .. player.UserId .. ": " .. tostring(err)) end
+	Saves.busy[uid] = nil
+	if lost then
+		meta.lost = true
+		warn("[MWS] Sauvegarde refusee pour " .. uid .. " : session perimee")
+		if player.Parent then player:Kick("Ta partie a ete ouverte ailleurs. Reconnecte-toi dans un instant !") end
+		return false
+	end
+	if not (ok and written) then
+		warn("[MWS] Echec de sauvegarde pour " .. uid .. ": " .. tostring(err))
+		return false
+	end
+	if final then meta.released = true end
+	return true
 end
 
 local function rollPet(s, eggPool)
@@ -4636,8 +4719,9 @@ Players.PlayerRemoving:Connect(function(player)
 	local b = battles[player.UserId]
 	if b then returnPlayerFromArena(player, b) end
 	battles[player.UserId] = nil
-	savePlayer(player)
-	states[player.UserId] = nil
+	local leaving = states[player.UserId]
+	savePlayer(player, true)
+	if states[player.UserId] == leaving then states[player.UserId] = nil end -- pas celui d'une reconnexion
 	equipRequestAt[player.UserId] = nil
 	battleActionAt[player.UserId] = nil
 	speedBuyAt[player.UserId] = nil
@@ -4653,7 +4737,17 @@ task.spawn(function()
 end)
 
 game:BindToClose(function()
-	for _, p in ipairs(Players:GetPlayers()) do savePlayer(p) end
+	local pending = 0
+	for _, p in ipairs(Players:GetPlayers()) do
+		pending = pending + 1
+		task.spawn(function()
+			pcall(savePlayer, p, true)
+			pending = pending - 1
+		end)
+	end
+	while pending > 0 do
+		task.wait(0.1)
+	end
 end)
 
 -- ============================================================
