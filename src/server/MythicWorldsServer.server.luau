@@ -1369,6 +1369,7 @@ function Saves.snapshot(s)
 		speedBoostUntil = s.speedBoostUntil or 0,
 		luckUntil = s.luckUntil or 0, luckMult = s.luckMult or 1,
 		receipts = table.clone(s.receipts or {}), bought = s.bought or {},
+		pendingPets = table.clone(s.pendingPets or {}),
 		tut = s.tut, tutProg = s.tutProg, dex = s.dex, dexClaimed = s.dexClaimed, daily = s.daily, quests = s.quests,
 		auraColor = s.auraColor,
 		lastSeen = os.time(),
@@ -1409,6 +1410,14 @@ local function loadPlayer(player)
 		Saves.meta[s] = { session = session, version = version, saved = saved }
 	end
 	if type(s.bought) ~= "table" then s.bought = {} end
+	-- pets achetes avec l'inventaire plein, en attente d'une place libre
+	local pendingPets = {}
+	if type(s.pendingPets) == "table" then
+		for _, name in ipairs(s.pendingPets) do
+			if PETS[name] then table.insert(pendingPets, name) end
+		end
+	end
+	s.pendingPets = pendingPets
 	if type(s.auraColor) ~= "string" then s.auraColor = "auto" end
 	local cleanPets, ownedIds, maxId = {}, {}, 0
 	for _, pet in ipairs(s.pets) do
@@ -4460,7 +4469,27 @@ do
 		end
 	end
 
-	-- donne la recompense d'un produit ; renvoie false si impossible (ex : inventaire plein)
+	local function addShopPet(player, s, name)
+		local info = PETS[name]
+		local id = s.nextPetId
+		s.nextPetId = id + 1
+		table.insert(s.pets, { id = id, name = name, rarity = info.rarity, color = info.color, multiplier = info.multiplier, income = info.income })
+		if _G.MWS_Track then _G.MWS_Track(player, "pet", name) end
+	end
+
+	-- livre les pets en attente des qu'une place se libere (fusion...)
+	local function deliverPendingPets(player, s)
+		local delivered = false
+		while #s.pendingPets > 0 and #s.pets < MAX_PETS do
+			local name = table.remove(s.pendingPets, 1)
+			addShopPet(player, s, name)
+			notify(player, name .. " est arrive dans ton inventaire !", Color3.fromRGB(120, 255, 180))
+			delivered = true
+		end
+		if delivered then sendState(player) end
+	end
+
+	-- donne la recompense d'un produit ; renvoie false si impossible, puis true si elle est mise en attente
 	local function grantReward(player, s, item)
 		local r = item.reward
 		if type(r) ~= "table" then return false end
@@ -4476,15 +4505,16 @@ do
 		elseif r.type == "pet" then
 			local info = PETS[r.pet]
 			if not info then warn("[MWS] Boutique : animal inconnu " .. tostring(r.pet)); return false end
-			if #s.pets >= MAX_PETS then return false end
-			local id = s.nextPetId
-			s.nextPetId = id + 1
-			table.insert(s.pets, { id = id, name = r.pet, rarity = info.rarity, color = info.color, multiplier = info.multiplier, income = info.income })
-			if _G.MWS_Track then _G.MWS_Track(player, "pet", r.pet) end
+			-- deja paye : on ne perd rien, il est sauvegarde en attente d'une place
+			if #s.pets >= MAX_PETS then
+				table.insert(s.pendingPets, r.pet)
+				return true, true
+			end
+			addShopPet(player, s, r.pet)
 		else
 			return false
 		end
-		return true
+		return true, false
 	end
 
 	-- achats de produits (Robux) : appele par Roblox apres chaque paiement
@@ -4505,8 +4535,9 @@ do
 				warn("[MWS] Produit inconnu dans MWS_ShopConfig : " .. tostring(receipt.ProductId))
 				return Enum.ProductPurchaseDecision.NotProcessedYet
 			end
-			if not grantReward(player, s, item) then
-				notify(player, "Achat impossible (inventaire plein ?). Tu ne seras pas debite.", Color3.fromRGB(255, 120, 120))
+			local granted, queued = grantReward(player, s, item)
+			if not granted then
+				notify(player, "Achat recu, mais pas encore livre : il sera retente a ta prochaine connexion.", Color3.fromRGB(255, 200, 90))
 				return Enum.ProductPurchaseDecision.NotProcessedYet
 			end
 			if item.limit then s.bought[item.key] = (s.bought[item.key] or 0) + 1 end
@@ -4514,7 +4545,11 @@ do
 			while #s.receipts > 100 do table.remove(s.receipts, 1) end
 			sendState(player)
 			refreshPetVisuals(player)
-			notify(player, "Merci ! " .. item.name .. " ajoute !", Color3.fromRGB(120, 255, 180))
+			if queued then
+				notify(player, "Inventaire plein : " .. item.name .. " arrivera des qu'une place se libere.", Color3.fromRGB(255, 220, 80))
+			else
+				notify(player, "Merci ! " .. item.name .. " ajoute !", Color3.fromRGB(120, 255, 180))
+			end
 			task.spawn(sendShopInfo, player)
 		end
 		-- Roblox ne doit considerer l'achat livre qu'une fois recompense + recu sauvegardes ensemble.
@@ -4565,6 +4600,10 @@ do
 			notify(player, "Limite atteinte : un seul exemplaire par joueur !", Color3.fromRGB(255, 220, 80))
 			return
 		end
+		if type(item.reward) == "table" and item.reward.type == "pet" and #s.pets >= MAX_PETS then
+			notify(player, "Ton inventaire est plein : libere une place avant d'acheter ce pet.", Color3.fromRGB(255, 220, 80))
+			return
+		end
 		if item.kind == "gamepass" then
 			if s.passes and s.passes[item.key] then
 				notify(player, "Tu possedes deja cet article !", Color3.fromRGB(255, 220, 80))
@@ -4595,6 +4634,7 @@ do
 				end
 			end
 			if (s.speedBoostUntil or 0) > os.time() then scheduleSpeedEnd(player) end
+			deliverPendingPets(player, s)
 			sendState(player)
 			sendWorldInfo(player)
 			sendShopInfo(player)
@@ -4602,6 +4642,15 @@ do
 	end
 	Players.PlayerAdded:Connect(onShopPlayer)
 	for _, p in ipairs(Players:GetPlayers()) do onShopPlayer(p) end
+
+	task.spawn(function()
+		while task.wait(15) do
+			for _, p in ipairs(Players:GetPlayers()) do
+				local s = states[p.UserId]
+				if s then deliverPendingPets(p, s) end
+			end
+		end
+	end)
 end
 
 -- ============================================================
