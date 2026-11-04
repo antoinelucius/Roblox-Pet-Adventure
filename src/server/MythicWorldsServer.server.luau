@@ -1441,6 +1441,14 @@ function Saves.release(player, session)
 	end)
 end
 
+-- Copie complete : une sauvegarde en attente ne doit jamais suivre les changements du jeu.
+function Saves.deepCopy(value)
+	if type(value) ~= "table" then return value end
+	local copy = {}
+	for k, v in pairs(value) do copy[k] = Saves.deepCopy(v) end
+	return copy
+end
+
 -- Uniquement les champs persistants, pas les objets Roblox temporaires.
 function Saves.snapshot(s)
 	local petsCopy, equippedCopy, defeatedCopy = {}, {}, {}
@@ -1455,9 +1463,10 @@ function Saves.snapshot(s)
 		unlockedWorld = s.unlockedWorld, nextPetId = s.nextPetId,
 		speedBoostUntil = s.speedBoostUntil or 0,
 		luckUntil = s.luckUntil or 0, luckMult = s.luckMult or 1,
-		receipts = table.clone(s.receipts or {}), bought = s.bought or {},
+		receipts = table.clone(s.receipts or {}), bought = Saves.deepCopy(s.bought or {}),
 		pendingPets = table.clone(s.pendingPets or {}),
-		tut = s.tut, tutProg = s.tutProg, dex = s.dex, dexClaimed = s.dexClaimed, daily = s.daily, quests = s.quests,
+		tut = s.tut, tutProg = s.tutProg, dex = Saves.deepCopy(s.dex), dexClaimed = Saves.deepCopy(s.dexClaimed),
+		daily = Saves.deepCopy(s.daily), quests = Saves.deepCopy(s.quests),
 		auraColor = s.auraColor,
 		lastSeen = os.time(),
 	}
