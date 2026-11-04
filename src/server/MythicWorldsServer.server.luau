@@ -4779,7 +4779,7 @@ do
 			-- article propre a un monde : visible uniquement dans ce monde
 			if not item.world or item.world == myWorld then
 				table.insert(list, {
-					key = item.key, name = item.name, desc = item.desc, icon = item.icon, kind = item.kind, section = item.section,
+					key = item.key, name = item.name, desc = item.desc, icon = item.icon, kind = item.kind, section = item.section, model = item.model,
 					available = type(item.id) == "number" and item.id > 0,
 					price = fetchPrice(item) or item.price,
 					owned = (item.kind == "gamepass" and s.passes ~= nil and s.passes[item.key] == true)
@@ -4792,7 +4792,7 @@ do
 		if not player.Parent then return end
 		local potionList = {}
 		for _, def in ipairs(ShopConfig.Potions or {}) do
-			table.insert(potionList, { key = def.key, name = def.name, icon = def.icon, effect = def.effect, count = s.potions[def.key] or 0 })
+			table.insert(potionList, { key = def.key, model = def.model, name = def.name, icon = def.icon, effect = def.effect, count = s.potions[def.key] or 0 })
 		end
 		ShopInfo:FireClient(player, list, { speedUntil = s.speedBoostUntil or 0, luckUntil = s.luckUntil or 0, now = os.time(), potions = potionList })
 	end

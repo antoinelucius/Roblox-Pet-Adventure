@@ -2403,6 +2403,14 @@ do
     -- parties de la boutique + menu de droite qui fait defiler jusqu'a chacune
     local shopUI = {
         headers = {},
+        -- images des articles (sinon le modele 3D de MWS_ShopIcons, sinon l'icone)
+        images = {
+            Cash1 = "rbxassetid://77448100725172",
+            Cash2 = "rbxassetid://128631904278414",
+            Cash3 = "rbxassetid://118822943439682",
+            PotionLuck = "rbxassetid://100782958863911",
+            PotionSpeed = "rbxassetid://78020082797000",
+        },
         sections = {
             { key = "coins",  title = "PIÈCES",   icon = "\u{1F4B0}", color = Color3.fromRGB(60, 190, 90),  columns = 3 },
             { key = "boosts", title = "POTIONS",  icon = "\u{1F9EA}", color = Color3.fromRGB(150, 90, 240), columns = 3 },
@@ -2670,7 +2678,7 @@ do
                 -- les potions du joueur passent avant les lots a acheter
                 for i, potion in ipairs(shopMeta.potions or {}) do
                     table.insert(items, i, {
-                        inventory = true, key = potion.key, name = potion.name, icon = potion.icon,
+                        inventory = true, key = potion.key, model = potion.model, name = potion.name, icon = potion.icon,
                         desc = potion.effect .. "\nTu en as " .. potion.count, count = potion.count,
                     })
                 end
@@ -2697,7 +2705,7 @@ do
                 group.ZIndex = 6
                 group.Parent = shopScroll
                 local grid = Instance.new("UIGridLayout")
-                grid.CellSize = UDim2.new(1 / section.columns, -8, 0, 196)
+                grid.CellSize = UDim2.new(1 / section.columns, -8, 0, 226)
                 grid.CellPadding = UDim2.new(0, 8, 0, 8)
                 grid.SortOrder = Enum.SortOrder.LayoutOrder
                 grid.Parent = group
@@ -2719,7 +2727,7 @@ do
                     edge.Parent = card
 
                     local icon = Instance.new("TextLabel")
-                    icon.Size = UDim2.new(1, 0, 0, 74)
+                    icon.Size = UDim2.new(1, 0, 0, 104)
                     icon.Position = UDim2.new(0, 0, 0, 6)
                     icon.BackgroundTransparency = 1
                     icon.Text = item.icon or "?"
@@ -2728,10 +2736,69 @@ do
                     icon.TextColor3 = WHITE
                     icon.ZIndex = 8
                     icon.Parent = card
+                    -- image 3D de l'article, a la place de l'icone
+                    -- (GetService ici : ce bloc est a la limite de variables capturees)
+                    local iconFolder = game:GetService("ReplicatedStorage"):FindFirstChild("MWS_ShopIcons")
+                    local template = item.model and iconFolder and iconFolder:FindFirstChild(item.model)
+                    local picture = item.model and shopUI.images[item.model]
+                    if picture then
+                        icon.Visible = false
+                        local image = Instance.new("ImageLabel")
+                        image.AnchorPoint = Vector2.new(0.5, 0)
+                        image.Position = UDim2.new(0.5, 0, 0, 25)
+                        image.Size = UDim2.new(1, -40, 0, 88)
+                        image.BackgroundTransparency = 1
+                        image.Image = picture
+                        image.ScaleType = Enum.ScaleType.Fit
+                        image.ZIndex = 8
+                        image.Parent = card
+                        -- halo clair derriere l'objet
+                        local glow = Instance.new("Frame")
+                        glow.AnchorPoint = Vector2.new(0.5, 0.5)
+                        glow.Position = UDim2.new(0.5, 0, 0, 58)
+                        glow.Size = UDim2.new(0, 150, 0, 96)
+                        glow.BackgroundColor3 = WHITE
+                        glow.BackgroundTransparency = 0.72
+                        glow.ZIndex = 7
+                        makeCorner(glow, 48)
+                        glow.Parent = card
+                    elseif template then
+                        icon.Visible = false
+                        local view = Instance.new("ViewportFrame")
+                        view.Size = UDim2.new(1, 0, 0, 108)
+                        view.Position = UDim2.new(0, 0, 0, 2)
+                        view.BackgroundTransparency = 1
+                        view.Ambient = Color3.fromRGB(150, 150, 150)
+                        local tint = template:GetAttribute("Tint")
+                        if tint then view.ImageColor3 = tint end
+                        view.LightColor = Color3.fromRGB(255, 255, 255)
+                        view.LightDirection = Vector3.new(-1, -2, -2)
+                        view.ZIndex = 8
+                        view.Parent = card
+                        local shown = template:Clone()
+                        shown.Parent = view
+                        local boxCF, boxSize = shown:GetBoundingBox()
+                        local camera = Instance.new("Camera")
+                        local reach = math.max(boxSize.X, boxSize.Y, boxSize.Z)
+                        local eye = boxCF.Position + Vector3.new(reach * 0.4, reach * 0.7, -reach * 1.45)
+                        camera.CFrame = CFrame.lookAt(eye, boxCF.Position)
+                        camera.FieldOfView = 40
+                        camera.Parent = view
+                        view.CurrentCamera = camera
+                    end
+
+                    -- bandeau du nom : passe devant le bas de l'image
+                    local ribbon = Instance.new("Frame")
+                    ribbon.Position = UDim2.new(0, 0, 0, 112)
+                    ribbon.Size = UDim2.new(1, 0, 0, 28)
+                    ribbon.BackgroundColor3 = section.color:Lerp(Color3.new(0, 0, 0), 0.6)
+                    ribbon.BorderSizePixel = 0
+                    ribbon.ZIndex = 9
+                    ribbon.Parent = card
 
                     local nameL = Instance.new("TextLabel")
                     nameL.Size = UDim2.new(1, -16, 0, 24)
-                    nameL.Position = UDim2.new(0, 8, 0, 80)
+                    nameL.Position = UDim2.new(0, 8, 0, 114)
                     nameL.BackgroundTransparency = 1
                     nameL.Text = item.name or ""
                     nameL.TextColor3 = WHITE
@@ -2739,12 +2806,12 @@ do
                     nameL.TextSize = 16
                     nameL.TextStrokeTransparency = 0.4
                     nameL.TextTruncate = Enum.TextTruncate.AtEnd
-                    nameL.ZIndex = 8
+                    nameL.ZIndex = 10
                     nameL.Parent = card
 
                     local descL = Instance.new("TextLabel")
                     descL.Size = UDim2.new(1, -16, 0, 34)
-                    descL.Position = UDim2.new(0, 8, 0, 104)
+                    descL.Position = UDim2.new(0, 8, 0, 142)
                     descL.BackgroundTransparency = 1
                     descL.Text = item.desc or ""
                     descL.TextColor3 = Color3.fromRGB(235, 235, 240)

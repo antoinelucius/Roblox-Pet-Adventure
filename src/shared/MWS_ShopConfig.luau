@@ -12,6 +12,7 @@
 -- Options d'un article :
 --   world = N  -> l'article n'apparait et ne s'achete QUE quand le joueur est dans le monde N
 --   limit = N  -> nombre maximum d'achats par joueur (1 = un seul achat a vie)
+--   model      -> image 3D de ReplicatedStorage.MWS_ShopIcons (sinon l'icone est affichee)
 --   section    -> partie de la boutique : "coins", "boosts", "trails" ou "passes"
 -- Recompenses possibles (reward.type) :
 --   coins     -> { type = "coins", amount = 10000 }
@@ -26,47 +27,47 @@ local Config = {}
 
 Config.Items = {
 	{
-		key = "coins_s", section = "coins", kind = "product", id = 3728204521, price = 49,
+		key = "coins_s", model = "Cash1", section = "coins", kind = "product", id = 3728204521, price = 49,
 		icon = "\u{1F4B5}", name = "Pack de pieces S", desc = "+10 000 coins",
 		reward = { type = "coins", amount = 10000 },
 	},
 	{
-		key = "coins_m", section = "coins", kind = "product", id = 3728204674, price = 199,
+		key = "coins_m", model = "Cash2", section = "coins", kind = "product", id = 3728204674, price = 199,
 		icon = "\u{1F4B0}", name = "Pack de pieces M", desc = "+100 000 coins",
 		reward = { type = "coins", amount = 100000 },
 	},
 	{
-		key = "coins_l", section = "coins", kind = "product", id = 3728204806, price = 999,
+		key = "coins_l", model = "Cash3", section = "coins", kind = "product", id = 3728204806, price = 999,
 		icon = "\u{1F4B8}", name = "Pack de pieces L", desc = "+1 000 000 coins",
 		reward = { type = "coins", amount = 1000000 },
 	},
 	{
-		key = "luck15", section = "boosts", kind = "product", id = 3728204985, price = 99,
+		key = "luck15", model = "PotionLuck", section = "boosts", kind = "product", id = 3728204985, price = 99,
 		icon = "\u{1F340}", name = "Chance x1", desc = "1 potion de chance a garder",
 		reward = { type = "potion", potion = "luck", count = 1 },
 	},
 	{
-		key = "luck_x3", section = "boosts", kind = "product", id = 3728215316, price = 249,
+		key = "luck_x3", model = "PotionLuck", section = "boosts", kind = "product", id = 3728215316, price = 249,
 		icon = "\u{1F340}", name = "Chance x3", desc = "3 potions de chance a garder",
 		reward = { type = "potion", potion = "luck", count = 3 },
 	},
 	{
-		key = "luck_x10", section = "boosts", kind = "product", id = 3728215351, price = 699,
+		key = "luck_x10", model = "PotionLuck", section = "boosts", kind = "product", id = 3728215351, price = 699,
 		icon = "\u{1F340}", name = "Chance x10", desc = "10 potions de chance a garder",
 		reward = { type = "potion", potion = "luck", count = 10 },
 	},
 	{
-		key = "speed10", section = "boosts", kind = "product", id = 3728204836, price = 29,
+		key = "speed10", model = "PotionSpeed", section = "boosts", kind = "product", id = 3728204836, price = 29,
 		icon = "\u{26A1}", name = "Vitesse x1", desc = "1 potion de vitesse a garder",
 		reward = { type = "potion", potion = "speed", count = 1 },
 	},
 	{
-		key = "speed_x3", section = "boosts", kind = "product", id = 3728215390, price = 69,
+		key = "speed_x3", model = "PotionSpeed", section = "boosts", kind = "product", id = 3728215390, price = 69,
 		icon = "\u{26A1}", name = "Vitesse x3", desc = "3 potions de vitesse a garder",
 		reward = { type = "potion", potion = "speed", count = 3 },
 	},
 	{
-		key = "speed_x10", section = "boosts", kind = "product", id = 3728215415, price = 199,
+		key = "speed_x10", model = "PotionSpeed", section = "boosts", kind = "product", id = 3728215415, price = 199,
 		icon = "\u{26A1}", name = "Vitesse x10", desc = "10 potions de vitesse a garder",
 		reward = { type = "potion", potion = "speed", count = 10 },
 	},
@@ -94,8 +95,8 @@ Config.Items = {
 
 -- Potions gardees dans l'inventaire du joueur : il choisit quand les utiliser
 Config.Potions = {
-	{ key = "luck", name = "Potion de chance", icon = "\u{1F340}", seconds = 900, mult = 2, effect = "Chance x2 pendant 15 min" },
-	{ key = "speed", name = "Potion de vitesse", icon = "\u{26A1}", seconds = 600, effect = "Vitesse x2 pendant 10 min" },
+	{ key = "luck", model = "PotionLuck", name = "Potion de chance", icon = "\u{1F340}", seconds = 900, mult = 2, effect = "Chance x2 pendant 15 min" },
+	{ key = "speed", model = "PotionSpeed", name = "Potion de vitesse", icon = "\u{26A1}", seconds = 600, effect = "Vitesse x2 pendant 10 min" },
 }
 
 return Config
