@@ -65,7 +65,7 @@ Config.Items = {
 	},
 	{
 		key = "pass_x2", kind = "gamepass", id = 2071248448, price = 499,
-		icon = "\u{1F451}", name = "Gains x2", desc = "Tous tes gains de coins sont doubles, a vie",
+		icon = "\u{1F451}", name = "Gains x2", desc = "Double les revenus de tes pets et les cristaux, a vie",
 		reward = { type = "coinsmult", mult = 2 },
 	},
 }
