@@ -1409,7 +1409,7 @@ end
 -- ============================================================
 
 local function newState()
-	return { coins = START_COINS, pets = {}, equipped = {}, defeatedNPCs = {}, rebirthLevel = 0, unlockedWorld = 1, nextPetId = 1, speedBoostUntil = 0, luckUntil = 0, luckMult = 1, receipts = {}, bought = {} }
+	return { coins = START_COINS, pets = {}, equipped = {}, defeatedNPCs = {}, bossVersion = 2, rebirthLevel = 0, unlockedWorld = 1, nextPetId = 1, speedBoostUntil = 0, luckUntil = 0, luckMult = 1, receipts = {}, bought = {} }
 end
 
 local function getEquippedPets(s)
@@ -1573,7 +1573,7 @@ function Saves.snapshot(s)
 	for i, id in ipairs(s.defeatedNPCs) do defeatedCopy[i] = id end
 	return {
 		coins = s.coins, pets = petsCopy, equipped = equippedCopy,
-		defeatedNPCs = defeatedCopy, rebirthLevel = s.rebirthLevel,
+		defeatedNPCs = defeatedCopy, bossVersion = s.bossVersion, rebirthLevel = s.rebirthLevel,
 		unlockedWorld = s.unlockedWorld, nextPetId = s.nextPetId,
 		speedBoostUntil = s.speedBoostUntil or 0,
 		luckUntil = s.luckUntil or 0, luckMult = s.luckMult or 1,
@@ -1662,6 +1662,16 @@ local function loadPlayer(player)
 		end
 	end
 	s.equipped = cleanEquipped
+	-- ancienne liste de 9 boss -> liste actuelle ; le Spectre Errant (ancien 3) n'existe plus
+	if s.bossVersion ~= 2 then
+		local oldToNew = { [1] = 1, [2] = 2, [4] = 3, [5] = 4, [6] = 6, [7] = 7, [8] = 9, [9] = 10 }
+		local migrated = {}
+		for _, idx in ipairs(s.defeatedNPCs) do
+			if oldToNew[idx] then table.insert(migrated, oldToNew[idx]) end
+		end
+		s.defeatedNPCs = migrated
+		s.bossVersion = 2
+	end
 	local cleanDefeated, defeatedSet = {}, {}
 	for _, idx in ipairs(s.defeatedNPCs) do
 		if type(idx) == "number" and idx == math.floor(idx) and idx >= 1 and idx <= #NPC_TRAINERS and not defeatedSet[idx] then
