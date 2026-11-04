@@ -302,6 +302,8 @@ do
 	for i, st in ipairs(style) do
 		local npc = NPC_TRAINERS[i]
 		npc.rank, npc.height, npc.float, npc.lines, npc.mech = i, st[1], st[2], { st[3], st[4] }, st[5]
+		local nextNpc = NPC_TRAINERS[i + 1]
+		npc.finalBoss = nextNpc == nil or nextNpc.world ~= npc.world
 	end
 end
 
@@ -1188,7 +1190,7 @@ local function createBossModel(npc, scale)
 	local inArena = scale ~= 1
 	local rank = npc.rank or 1
 	local height = npc.height or 30
-	if inArena then height = math.max(8, height * 0.4) end
+	if inArena then height = math.max(8, height * (npc.finalBoss and 0.6 or 0.4)) end
 	local _, startSize = model:GetBoundingBox()
 	model:ScaleTo(model:GetScale() * height / startSize.Y)
 	local boxCF, size = model:GetBoundingBox()
@@ -1291,7 +1293,14 @@ local function createBossModel(npc, scale)
 		if group == "halo" then
 			table.insert(anims, { weld = weld, base = weld.C0, part = part, ax = 0, ay = 0, az = 1, amp = 1, speed = 0.4, phase = phase, spin = true })
 		else
-			table.insert(anims, { weld = weld, base = weld.C0, part = part, ax = ax, ay = ay, az = az, amp = amp, speed = speed, phase = phase, move = bob })
+			local entry = { weld = weld, base = weld.C0, base0 = weld.C0, part = part, ax = ax, ay = ay, az = az, amp = amp, speed = speed, phase = phase, move = bob }
+			if group == "head" then
+				entry.isHead = true
+			elseif group == "left" or group == "right" or (group == "weapon" and shoulder.right) then
+				local armPivot = (group == "left") and shoulder.left or shoulder.right
+				entry.armSide = (armPivot.X >= center.X) and 1 or -1
+			end
+			table.insert(anims, entry)
 		end
 	end
 	model.PrimaryPart = root
@@ -1342,7 +1351,17 @@ local function createBossModel(npc, scale)
 		table.insert(anims, { weld = weld, base = weld.C0, part = orb, ax = 0, ay = 1, az = 0, amp = 1, speed = 0.7, phase = k / orbCount * math.pi * 2, spin = true })
 	end
 
-	return model, root, head, { anims = anims, scale = scale }
+	-- pose du rire : bras ouverts, tete en arriere (k va de 0 a 1)
+	local function pose(k)
+		for _, a in ipairs(anims) do
+			if a.armSide then
+				a.base = a.base0 * CFrame.Angles(0, 0, a.armSide * 2 * k)
+			elseif a.isHead then
+				a.base = a.base0 * CFrame.Angles(0.5 * k, 0, 0)
+			end
+		end
+	end
+	return model, root, head, { anims = anims, scale = scale, pose = pose, height = size.Y }
 end
 
 local function createTrainerModel(npc, scale)
@@ -3999,7 +4018,7 @@ local function cleanupArena(b)
 end
 
 local function updateArenaVisuals(b)
-	if not b or not b.arena then return end
+	if not b or not b.arena or b.hideVisuals then return end
 	local origin = b.arena.origin
 	local sides = {
 		player = { st = b.playerPets[b.playerCurrent], pos = origin + V3(-10, 0, 0), face = V3(1, 0, 0) },
@@ -4420,6 +4439,33 @@ local function processPlayerSuper(player)
 	resolvePlayerStrike(player, b, damage, myPet.name .. " lance sa SUPER ATTAQUE ! " .. damage .. " degats !" .. note, 5)
 end
 
+-- Entree du dernier boss d'un monde : il se penche en arriere, bras ouverts, et rit
+BossFight.INTRO_SECONDS = 3.4
+function BossFight.intro(player, b, model, root, P)
+	local base = root.CFrame
+	local t0 = os.clock()
+	local total = BossFight.INTRO_SECONDS
+	while true do
+		task.wait()
+		if battles[player.UserId] ~= b or not b.active or not root.Parent then
+			b.hideVisuals = false
+			return
+		end
+		local t = os.clock() - t0
+		if t >= total then break end
+		local k = math.clamp(t / 0.5, 0, 1) * math.clamp((total - t) / 0.4, 0, 1)
+		local laugh = math.sin(t * 16)
+		P.pose(k)
+		root.CFrame = base * CF(0, math.abs(laugh) * 0.5 * k, 0) * CFrame.Angles(0.35 * k + laugh * 0.035 * k, 0, 0)
+	end
+	P.pose(0)
+	root.CFrame = base
+	b.hideVisuals = false
+	b.turn = "player"
+	b.log = "À toi de jouer !"
+	sendBattleUpdate(player)
+end
+
 -- Proteger : encaisse moins sur la prochaine attaque et gagne un peu de charge
 function BossFight.guard(player)
 	local b = battles[player.UserId]
@@ -4551,8 +4597,18 @@ startBattle = function(player, npcIndex)
 		return
 	end
 
+	b.hideVisuals = npc.finalBoss and tP.pose ~= nil
 	updateArenaVisuals(b)
-	BattleStart:FireClient(player, battlePayload(b))
+	if npc.finalBoss and tP.pose then
+		b.turn = "wait"
+		b.log = npc.name .. " éclate de rire !"
+		local payload = battlePayload(b)
+		payload.bossIntro = { focus = tRoot.Position, height = tP.height, seconds = BossFight.INTRO_SECONDS }
+		BattleStart:FireClient(player, payload)
+		task.spawn(BossFight.intro, player, b, tModel, tRoot, tP)
+	else
+		BattleStart:FireClient(player, battlePayload(b))
+	end
 end
 
 -- ============================================================
@@ -6339,6 +6395,27 @@ do
 											info.hangRoot.AssemblyLinearVelocity = info.hangRoot.AssemblyLinearVelocity + away * 26
 										end
 										if info.burst then info.burst:Emit(8) end
+										if info.anchor and info.anchor.Parent then
+											if not info.hitSound then
+												local SoundService = game:GetService("SoundService")
+												local group = SoundService:FindFirstChild("MWS_WorldSounds")
+												if not group then
+													group = Instance.new("SoundGroup")
+													group.Name = "MWS_WorldSounds"
+													group.Parent = SoundService
+												end
+												local sound = Instance.new("Sound")
+												sound.Name = "BagHit"
+												sound.SoundId = "rbxassetid://9117969420"
+												sound.Volume = 0.4
+												sound.RollOffMaxDistance = 70
+												sound.SoundGroup = group
+												sound.Parent = info.anchor
+												info.hitSound = sound
+											end
+											info.hitSound.PlaybackSpeed = 0.9 + math.random() * 0.2
+											info.hitSound:Play()
+										end
 									end)
 								end
 							else

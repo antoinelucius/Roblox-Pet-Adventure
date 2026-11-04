@@ -283,7 +283,15 @@ scrollFrame.AutomaticCanvasSize = Enum.AutomaticSize.Y
 local grid = Instance.new("UIGridLayout")
 grid.CellSize = UDim2.new(0, 120, 0, 145)
 grid.CellPadding = UDim2.new(0, 8, 0, 8)
-grid.Parent = scrollFrame
+-- une grille par monde : voir refreshPanel
+scrollFrame:SetAttribute("CellSize", grid.CellSize)
+scrollFrame:SetAttribute("CellPadding", grid.CellPadding)
+do
+    local petSections = Instance.new("UIListLayout")
+    petSections.Padding = UDim.new(0, 8)
+    petSections.SortOrder = Enum.SortOrder.LayoutOrder
+    petSections.Parent = scrollFrame
+end
 scrollFrame.Parent = panel
 
 -- ============================================================
@@ -782,11 +790,58 @@ hatchImage.Visible = false
 
 local function refreshPanel()
     for _, child in ipairs(scrollFrame:GetChildren()) do
-        if child:IsA("Frame") then child:Destroy() end
+        if child:IsA("Frame") or child:IsA("TextLabel") then child:Destroy() end
     end
 
-    for _, pet in ipairs(state.pets) do
+    -- classement : monde d'origine (premier oeuf qui donne ce pet), puis rarete, du plus rare au moins rare
+    local petWorld = {}
+    for _, egg in ipairs(eggData) do
+        for _, entry in ipairs(egg.pool or {}) do
+            petWorld[entry.name] = math.min(petWorld[entry.name] or 99, egg.world or 99)
+        end
+    end
+    local rarityRank = { Commun = 1, Rare = 2, Epique = 3, Legendaire = 4, Mythique = 5, Divin = 6, Secret = 7 }
+    local sortedPets = table.clone(state.pets)
+    table.sort(sortedPets, function(a, b)
+        local wa, wb = petWorld[a.name] or 99, petWorld[b.name] or 99
+        if wa ~= wb then return wa < wb end
+        local ra, rb = rarityRank[a.rarity] or 0, rarityRank[b.rarity] or 0
+        if ra ~= rb then return ra > rb end
+        if (a.tier or 0) ~= (b.tier or 0) then return (a.tier or 0) > (b.tier or 0) end
+        if (a.income or 0) ~= (b.income or 0) then return (a.income or 0) > (b.income or 0) end
+        return (a.id or 0) < (b.id or 0)
+    end)
+
+    local sectionWorld, sectionGroup, sectionCount = nil, nil, 0
+    for cardIndex, pet in ipairs(sortedPets) do
+        local world = petWorld[pet.name] or 99
+        if world ~= sectionWorld then
+            sectionWorld = world
+            sectionCount = sectionCount + 1
+            local header = Instance.new("TextLabel")
+            header.LayoutOrder = sectionCount * 2
+            header.Size = UDim2.new(1, -10, 0, 30)
+            header.BackgroundTransparency = 1
+            header.Text = (world == 99) and "— AUTRES PETS —" or ("— MONDE " .. world .. " —")
+            header.TextColor3 = Color3.fromRGB(255, 225, 120)
+            header.Font = Enum.Font.FredokaOne
+            header.TextSize = 22
+            header.TextStrokeTransparency = 0.5
+            header.Parent = scrollFrame
+            sectionGroup = Instance.new("Frame")
+            sectionGroup.LayoutOrder = sectionCount * 2 + 1
+            sectionGroup.Size = UDim2.new(1, -10, 0, 0)
+            sectionGroup.AutomaticSize = Enum.AutomaticSize.Y
+            sectionGroup.BackgroundTransparency = 1
+            sectionGroup.Parent = scrollFrame
+            local sectionGrid = Instance.new("UIGridLayout")
+            sectionGrid.CellSize = scrollFrame:GetAttribute("CellSize")
+            sectionGrid.CellPadding = scrollFrame:GetAttribute("CellPadding")
+            sectionGrid.SortOrder = Enum.SortOrder.LayoutOrder
+            sectionGrid.Parent = sectionGroup
+        end
         local card = Instance.new("Frame")
+        card.LayoutOrder = cardIndex
         card.Name = "PetCard" .. tostring(pet.id)
         card.BackgroundColor3 = RARITY_COLORS[pet.rarity] or Color3.fromRGB(100, 100, 100)
         makeCorner(card, 8)
@@ -870,7 +925,7 @@ local function refreshPanel()
             EquipPet:FireServer(pet.id)
         end)
 
-        card.Parent = scrollFrame
+        card.Parent = sectionGroup
     end
 end
 
@@ -2092,6 +2147,7 @@ local function playEggCinematic(style, tier, center, eggIndex, pet)
     end
 
     -- explosion
+    game:GetService("SoundService"):SetAttribute("MWS_EggBurst", os.clock()) -- son de l'oeuf qui eclate
     local big = ({ 5, 8, 13 })[tier] * SC * 0.8
     local c = center + Vector3.new(0, S.y, 0)
     for _, d in ipairs(model:GetDescendants()) do
