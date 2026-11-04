@@ -4777,6 +4777,8 @@ do
 					price = fetchPrice(item) or item.price,
 					owned = (item.kind == "gamepass" and s.passes ~= nil and s.passes[item.key] == true)
 						or (item.limit ~= nil and (s.bought[item.key] or 0) >= item.limit) or false,
+					trail = type(item.reward) == "table" and item.reward.type == "trail",
+					equipped = s.trail == item.key,
 				})
 			end
 		end
@@ -4829,7 +4831,7 @@ do
 	_G.MWS_ApplyTrail = function(player)
 		local s = states[player.UserId]
 		local char = player.Character
-		local hrp = char and char:FindFirstChild("HumanoidRootPart")
+		local hrp = char and char:WaitForChild("HumanoidRootPart", 5)
 		if not s or not hrp then return end
 		for _, name in ipairs({ "MWS_Trail", "MWS_TrailTop", "MWS_TrailBottom" }) do
 			local old = hrp:FindFirstChild(name)
@@ -4985,6 +4987,27 @@ do
 		else
 			pcall(function() MarketplaceService:PromptProductPurchase(player, item.id) end)
 		end
+	end)
+
+	-- equipe une trainee deja achetee (sans nouveau paiement) ; "" la retire
+	local trailChangeAt = {}
+	getRemote("SetTrail").OnServerEvent:Connect(function(player, key)
+		if type(key) ~= "string" then return end
+		local now = os.clock()
+		if trailChangeAt[player.UserId] and now - trailChangeAt[player.UserId] < 0.3 then return end
+		trailChangeAt[player.UserId] = now
+		local s = states[player.UserId]
+		if not s then return end
+		if key == "" then
+			s.trail = nil
+		else
+			local item = byKey[key]
+			local isTrail = item and type(item.reward) == "table" and item.reward.type == "trail"
+			if not isTrail or (s.bought[key] or 0) < 1 then return end
+			s.trail = key
+		end
+		_G.MWS_ApplyTrail(player)
+		task.spawn(sendShopInfo, player)
 	end)
 
 	-- au chargement du joueur : retrouve ses passes deja achetes + envoie la boutique
@@ -5145,6 +5168,7 @@ local function onPlayerAdded(player)
 	if player.Character then
 		task.defer(function()
 			applySpeedBoost(player)
+			if _G.MWS_ApplyTrail then _G.MWS_ApplyTrail(player) end
 			refreshPetVisuals(player)
 		end)
 	end
@@ -6365,6 +6389,7 @@ do
 		local s = player and states[player.UserId]
 		if not s then return end
 		if type(names) == "string" then
+			s.bought[names] = 1
 			s.trail = names
 			_G.MWS_ApplyTrail(player)
 			return

@@ -2659,7 +2659,10 @@ do
             buy.TextColor3 = WHITE
             buy.ZIndex = 7
             makeCorner(buy, 8)
-            if item.owned then
+            if item.owned and item.trail then
+                buy.Text = item.equipped and "Retirer" or "Équiper"
+                buy.BackgroundColor3 = item.equipped and Color3.fromRGB(150, 70, 80) or Color3.fromRGB(50, 110, 200)
+            elseif item.owned then
                 buy.Text = "\u{2714} Possede"
                 buy.BackgroundColor3 = Color3.fromRGB(60, 120, 70)
             elseif not item.available then
@@ -2671,7 +2674,11 @@ do
             end
             buy.Parent = card
             buy.MouseButton1Click:Connect(function()
-                if not item.owned then ShopBuy:FireServer(item.key) end
+                if item.owned and item.trail then
+                    remotes:WaitForChild("SetTrail"):FireServer(item.equipped and "" or item.key)
+                elseif not item.owned then
+                    ShopBuy:FireServer(item.key)
+                end
             end)
         end
     end
