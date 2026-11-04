@@ -29,7 +29,7 @@ local BLACK = Color3.new(0, 0, 0)
 local DARKC = Color3.fromRGB(20, 20, 30)
 
 -- MODE TEST : coûts réduits pour tester vite. METS false AVANT DE PUBLIER LE JEU.
-local TEST_MODE = true
+local TEST_MODE = false
 
 local START_COINS = TEST_MODE and 2000 or 100
 local MAX_PETS = 200
@@ -6379,41 +6379,5 @@ do
 end
 -- TRAINING_END
 
--- DEBUGHOOK_START
-do
-	local ev = Instance.new("BindableEvent")
-	ev.Name = "MWS_Debug"
-	ev.Parent = game:GetService("ServerStorage")
-	ev.Event:Connect(function(names)
-		local player = Players:GetPlayers()[1]
-		local s = player and states[player.UserId]
-		if not s then return end
-		if type(names) == "string" then
-			s.bought[names] = 1
-			s.trail = names
-			_G.MWS_ApplyTrail(player)
-			return
-		end
-		for _, n in ipairs(names) do
-			-- n = "Nom" ou { "Nom", size, mutation }
-			local size, mutation
-			if type(n) == "table" then n, size, mutation = n[1], n[2], n[3] end
-			local info = PETS[n]
-			if info then
-				local id = s.nextPetId
-				s.nextPetId = id + 1
-				local p = { id = id, name = n, rarity = info.rarity, color = info.color, tier = 0, size = size, mutation = mutation }
-				local tm = Traits.mult(p)
-				p.multiplier, p.income = info.multiplier * tm, math.floor(info.income * tm)
-				table.insert(s.pets, p)
-				if #s.equipped < maxEquip(s) then table.insert(s.equipped, id) end
-		while #s.equipped > maxEquip(s) do table.remove(s.equipped) end
-			end
-		end
-		sendState(player)
-		refreshPetVisuals(player)
-	end)
-end
--- DEBUGHOOK_END
 print("[MWS] Mythic Worlds Simulator v5 initialise : 3 mondes, 31 pets, 6 oeufs, 10 monstres.")
 
