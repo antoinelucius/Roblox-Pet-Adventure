@@ -711,9 +711,32 @@ battleLog.TextStrokeTransparency = 0.35
 chargeBarBg.Size = UDim2.new(0, 360, 0, 14)
 chargeBarBg.Position = UDim2.new(0.5, -180, 1, -88)
 chargeText.TextSize = 11
-for i, btn in ipairs({ attackBtn, special1Btn, special2Btn, special3Btn, switchBtn, fleeBtn }) do
-    btn.Size = UDim2.new(0, 100, 0, 44)
-    btn.Position = UDim2.new(0.5, -318 + (i - 1) * 106, 1, -64)
+-- Proteger : encaisse moins sur la prochaine attaque ennemie
+local guardBtn = Instance.new("TextButton")
+guardBtn.BackgroundColor3 = Color3.fromRGB(50, 110, 200)
+guardBtn.Text = "\u{1F6E1} Protéger"
+guardBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+guardBtn.Font = Enum.Font.GothamBold
+guardBtn.TextSize = 13
+guardBtn.ZIndex = 22
+guardBtn.Visible = false
+makeCorner(guardBtn, 10)
+guardBtn.Parent = battlePanel
+-- ce que le joueur doit surveiller : super attaque, bouclier, surchauffe
+local battleStatus = Instance.new("TextLabel")
+battleStatus.BackgroundTransparency = 1
+battleStatus.Size = UDim2.new(0, 640, 0, 26)
+battleStatus.Position = UDim2.new(0.5, -320, 1, -162)
+battleStatus.Font = Enum.Font.GothamBlack
+battleStatus.TextSize = 17
+battleStatus.TextColor3 = Color3.fromRGB(255, 210, 90)
+battleStatus.TextStrokeTransparency = 0.3
+battleStatus.Text = ""
+battleStatus.ZIndex = 22
+battleStatus.Parent = battlePanel
+for i, btn in ipairs({ attackBtn, guardBtn, special1Btn, special2Btn, special3Btn, switchBtn, fleeBtn }) do
+    btn.Size = UDim2.new(0, 92, 0, 44)
+    btn.Position = UDim2.new(0.5, -340 + (i - 1) * 98, 1, -64)
 end
 special1Btn.Text = "\u{1F4A5} Coup charge"
 special2Btn.Text = "\u{26A1} Assaut"
@@ -1486,7 +1509,7 @@ local function updateBattleUI(data)
         playerPetIcon.BackgroundColor3 = colorFromData(myPet.color)
         setPetViewport(playerPetImg, myPet.name, myPet.rarity)
         local hpPct = myPet.hp / myPet.maxHp
-        playerHpBar.Size = UDim2.new(hpPct, 0, 1, 0)
+        TweenService:Create(playerHpBar, TweenInfo.new(0.25), { Size = UDim2.new(hpPct, 0, 1, 0) }):Play()
         playerHpBar.BackgroundColor3 = Color3.fromRGB(
             math.floor(50 + (1 - hpPct) * 150),
             math.floor(200 * hpPct),
@@ -1501,14 +1524,14 @@ local function updateBattleUI(data)
         npcPetIcon.BackgroundColor3 = colorFromData(enemyPet.color)
         setPetViewport(npcPetImg, enemyPet.name, enemyPet.rarity)
         local hpPct = enemyPet.hp / enemyPet.maxHp
-        npcHpBar.Size = UDim2.new(hpPct, 0, 1, 0)
+        TweenService:Create(npcHpBar, TweenInfo.new(0.25), { Size = UDim2.new(hpPct, 0, 1, 0) }):Play()
         npcHpBar.BackgroundColor3 = Color3.fromRGB(
             math.floor(200 * hpPct + 50),
             math.floor(80 * (1 - hpPct)),
             math.floor(50 * (1 - hpPct))
         )
         npcHpText.Text = enemyPet.hp .. " / " .. enemyPet.maxHp .. " HP"
-        npcPetCount.Text = "Pet " .. data.npcCurrent .. " / " .. #data.npcPets
+        npcPetCount.Text = enemyPet.isBoss and "BOSS" or ("Pet " .. data.npcCurrent .. " / " .. #data.npcPets)
     end
 
     battleLog.Text = data.log or ""
@@ -1530,6 +1553,8 @@ local function updateBattleUI(data)
         chargeText.TextColor3 = Color3.fromRGB(255, 255, 255)
     end
 
+    guardBtn.Visible = data.active == true and data.turn == "player"
+    battleStatus.Text = data.status or ""
     if data.active then
         if data.turn == "player" then
             attackBtn.Visible = true
@@ -1606,6 +1631,10 @@ end
 
 attackBtn.MouseButton1Click:Connect(function()
     BattleAction:FireServer("attack")
+end)
+
+guardBtn.MouseButton1Click:Connect(function()
+    BattleAction:FireServer("guard")
 end)
 
 switchBtn.MouseButton1Click:Connect(function()

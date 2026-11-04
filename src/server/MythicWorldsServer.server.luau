@@ -290,9 +290,9 @@ do
 	local style = {
 		{ 12, false, "Hé hé ! Tu es sûr de vouloir m'affronter, petit ?", "Tes pets vont finir dans ma marmite !" },
 		{ 16, false, "Tu oses marcher sur mes terres ? Tu veux vraiment te battre ?", "Alors prépare-toi à être écrasé !" },
-		{ 21, false, "Cette armure est vide... mais elle n'a jamais perdu. Es-tu prêt ?", "En garde, voyageur !" },
+		{ 21, false, "Cette armure est vide... mais elle n'a jamais perdu. Es-tu prêt ?", "En garde, voyageur !", "shield" },
 		{ 26, false, "La forêt t'observe depuis ton arrivée. Oseras-tu me défier ?", "Mes racines vont t'engloutir !" },
-		{ 30, false, "Mon corps brûle depuis la naissance du volcan. Tu veux vraiment t'y frotter ?", "Je vais te fondre comme de la cire !" },
+		{ 30, false, "Mon corps brûle depuis la naissance du volcan. Tu veux vraiment t'y frotter ?", "Je vais te fondre comme de la cire !", "heat" },
 		{ 34, true, "Tous ceux qui m'ont défié reposent ici. Tu veux les rejoindre ?", "Ta place est déjà creusée." },
 		{ 38, false, "Un mortel devant le Prince des Cendres ? Tu es sûr de ton choix ?", "Brûle, et que tes cendres me servent de trône !" },
 		{ 42, false, "Mes queues ont balayé des armées entières. Es-tu sûr de toi ?", "Attrape-moi, si tu le peux !" },
@@ -301,7 +301,7 @@ do
 	}
 	for i, st in ipairs(style) do
 		local npc = NPC_TRAINERS[i]
-		npc.rank, npc.height, npc.float, npc.lines = i, st[1], st[2], { st[3], st[4] }
+		npc.rank, npc.height, npc.float, npc.lines, npc.mech = i, st[1], st[2], { st[3], st[4] }, st[5]
 	end
 end
 
@@ -1581,7 +1581,7 @@ function Saves.snapshot(s)
 		pendingPets = table.clone(s.pendingPets or {}),
 		tut = s.tut, tutProg = s.tutProg, dex = Saves.deepCopy(s.dex), dexClaimed = Saves.deepCopy(s.dexClaimed),
 		daily = Saves.deepCopy(s.daily), quests = Saves.deepCopy(s.quests),
-		auraColor = s.auraColor,
+		auraColor = s.auraColor, trail = s.trail,
 		lastSeen = os.time(),
 	}
 end
@@ -1629,6 +1629,7 @@ local function loadPlayer(player)
 	end
 	s.pendingPets = pendingPets
 	if type(s.auraColor) ~= "string" then s.auraColor = "auto" end
+	if type(s.trail) ~= "string" then s.trail = nil end
 	local cleanPets, ownedIds, maxId = {}, {}, 0
 	for _, pet in ipairs(s.pets) do
 		if type(pet) == "table" and PETS[pet.name] and type(pet.id) == "number" then
@@ -4005,17 +4006,25 @@ local function updateArenaVisuals(b)
 			vis = nil
 		end
 		if st and not vis and st.hp > 0 then
-			local model, root, P = createPetModel(st.name, true, 1.6 * Traits.scale(st), st.mutation)
+			local model, root, P
+			if st.isBoss and b.trainerModel then
+				-- le boss descend lui-meme dans l'arene : on reprend son modele
+				model = b.trainerModel
+				root = model.PrimaryPart or model:FindFirstChild("HumanoidRootPart")
+				P = { foot = 2.1, scale = 1.3 }
+			else
+				model, root, P = createPetModel(st.name, true, 1.6 * Traits.scale(st), st.mutation)
+			end
 			local y = origin.Y + 0.9 + P.foot * P.scale + (P.flying and 2.5 or 0)
-			local pos = V3(sd.pos.X, y, sd.pos.Z)
+			local pos = V3(sd.pos.X + (st.isBoss and 4 or 0), y, sd.pos.Z)
 			local base = CFrame.lookAt(pos, pos + sd.face)
 			root.CFrame = base
 			model.Parent = b.arena.folder
-			staticAnimators[model] = P.anims
+			if not st.isBoss then staticAnimators[model] = P.anims end
 
 			local bb = Instance.new("BillboardGui")
 			bb.Size = UDim2.new(0, 170, 0, 46)
-			bb.StudsOffset = V3(0, 3 + P.scale * 2, 0)
+			bb.StudsOffset = V3(0, st.isBoss and (st.height or 15) or (3 + P.scale * 2), 0)
 			bb.AlwaysOnTop = true
 			bb.Adornee = root
 			bb.Parent = root
@@ -4079,6 +4088,40 @@ end
 -- COMBAT
 -- ============================================================
 
+-- Mecaniques de combat : protection, bouclier du Chevalier, surchauffe du Golem
+local BossFight = {}
+BossFight.GUARD_FACTOR = 0.3
+
+function BossFight.status(b)
+	local enemy = b.npcPets[b.npcCurrent]
+	if not enemy or not b.active then return nil end
+	if enemy.stunned then return "\u{1F4AB} " .. enemy.name .. " est sonné : il ne pourra pas attaquer !" end
+	if enemy.shield then return "\u{1F6E1} Bouclier levé : seule une attaque chargée peut le briser !" end
+	if (enemy.cooled or 0) > 0 then return "\u{2744} Le Golem refroidit : il subit +50 % de dégâts !" end
+	if enemy.heat then
+		if enemy.heat >= 100 then return "\u{1F30B} ÉRUPTION imminente : protège ton pet !" end
+		return "\u{1F525} Surchauffe : " .. enemy.heat .. " %"
+	end
+	if not enemy.mech and enemy.charge >= enemy.maxCharge then
+		return "\u{26A0} " .. enemy.name .. " prépare sa SUPER ATTAQUE : protège ton pet !"
+	end
+	return nil
+end
+
+-- ajuste les degats d'une attaque du joueur ; heavy = attaque chargee
+function BossFight.strike(enemy, damage, heavy)
+	if enemy.shield then
+		if heavy then
+			enemy.shield = false
+			enemy.stunned = true
+			return damage, " BOUCLIER BRISÉ !"
+		end
+		return math.max(1, math.floor(damage * 0.2)), " Le bouclier encaisse le coup !"
+	end
+	if (enemy.cooled or 0) > 0 then return math.floor(damage * 1.5), " Point faible !" end
+	return damage, ""
+end
+
 local function sendBattleUpdate(player)
 	local b = battles[player.UserId]
 	if not b then return end
@@ -4092,6 +4135,7 @@ local function sendBattleUpdate(player)
 		playerMaxCharge = myPet and myPet.maxCharge or 100,
 		playerCanSuper = myPet and myPet.charge >= myPet.maxCharge or false,
 		fxId = b.fxId, fxPower = b.fxPower, fxFrom = b.fxFrom, fxTo = b.fxTo,
+		status = BossFight.status(b),
 	})
 end
 
@@ -4114,6 +4158,7 @@ local function battlePayload(b)
 		playerCharge = myPet and myPet.charge or 0,
 		playerMaxCharge = myPet and myPet.maxCharge or 100,
 		playerCanSuper = myPet and myPet.charge >= myPet.maxCharge or false,
+		status = BossFight.status(b),
 	}
 end
 
@@ -4143,25 +4188,51 @@ local function processNPCAttack(player, expected)
 	local myPet = b.playerPets[b.playerCurrent]
 	if not enemyPet or not myPet then return end
 
-	local isSuper = enemyPet.charge >= enemyPet.maxCharge
+	if enemyPet.stunned then
+		enemyPet.stunned = false
+		b.guard = false
+		b.log = enemyPet.name .. " est sonné et perd son tour !"
+		b.turn = "player"
+		sendBattleUpdate(player)
+		return
+	end
+	if (enemyPet.cooled or 0) > 0 then enemyPet.cooled = enemyPet.cooled - 1 end
+	local erupting = enemyPet.heat ~= nil and enemyPet.heat >= 100
+	local isSuper = erupting or (not enemyPet.mech and enemyPet.charge >= enemyPet.maxCharge)
 	local baseDamage = math.floor(enemyPet.attack * (0.8 + math.random() * 0.4))
 	local damage = isSuper and baseDamage * 3 or baseDamage
 	local crit = (not isSuper) and math.random() < 0.1
 	if crit then damage = math.floor(damage * 1.5) end
+	local guarded = b.guard == true
+	b.guard = false
+	if guarded then damage = math.max(1, math.floor(damage * BossFight.GUARD_FACTOR)) end
 
-	if isSuper then
+	if erupting then
+		enemyPet.heat = 0
+		enemyPet.cooled = 2
+		b.log = enemyPet.name .. " entre en ÉRUPTION ! " .. damage .. " degats !"
+	elseif isSuper then
 		enemyPet.charge = 0
 		b.log = enemyPet.name .. " lance sa SUPER ATTAQUE ! " .. damage .. " degats !"
 	else
-		enemyPet.charge = math.min(enemyPet.maxCharge, enemyPet.charge + 33)
+		if not enemyPet.mech then enemyPet.charge = math.min(enemyPet.maxCharge, enemyPet.charge + 33) end
 		b.log = enemyPet.name .. " inflige " .. damage .. " degats !" .. (crit and " COUP CRITIQUE !" or "")
+		if enemyPet.heat then enemyPet.heat = math.min(100, enemyPet.heat + 25) end
+		if enemyPet.mech == "shield" then
+			enemyPet.turns = (enemyPet.turns or 0) + 1
+			if enemyPet.turns % 3 == 0 then
+				enemyPet.shield = true
+				b.log = b.log .. " Il lève son bouclier !"
+			end
+		end
 	end
+	if guarded then b.log = b.log .. " Ton pet se protège !" end
 	local ev, pv = b.vis.npc, b.vis.player
 	local power = isSuper and 4 or (crit and 2 or 1)
 	local hit = impactDelay(power)
 	if ev and power < 4 then task.delay(hit - 0.4, function() ev.lungeStart = os.clock() end) end
 	if pv then
-		if ev then playAttackFx(b.arena.folder, ev, pv.root.Position, elementOf(enemyPet.name), power) end
+		if ev then playAttackFx(b.arena.folder, ev, pv.root.Position, elementOf(enemyPet.fxName or enemyPet.name), power) end
 		task.delay(hit, function()
 			pv.shakeUntil = os.clock() + 0.35 + power * 0.12
 			if pv.root.Parent then popText(b.arena.folder, pv.root.Position + V3(0, 4, 0), "-" .. damage, Color3.fromRGB(255, 90, 90)) end
@@ -4179,7 +4250,7 @@ local function processNPCAttack(player, expected)
 		myPet.hp = math.max(0, myPet.hp - damage)
 		sendBattleUpdate(player)
 	end)
-	task.delay(hit + 0.5, function()
+	task.delay(hit + 0.3, function()
 		if battles[player.UserId] ~= b or not b.active then return end
 		if myPet.hp <= 0 then
 			b.log = b.log .. " " .. myPet.name .. " est K.O. !"
@@ -4262,15 +4333,21 @@ local function resolvePlayerStrike(player, b, damage, text, power)
 		enemyPet.hp = math.max(0, enemyPet.hp - damage)
 		sendBattleUpdate(player)
 	end)
-	task.delay(hit + 0.5, function()
+	task.delay(hit + 0.3, function()
 		if battles[player.UserId] ~= b or not b.active then return end
 		if enemyPet.hp <= 0 then
 			b.log = b.log .. " " .. enemyPet.name .. " est K.O. !"
 			killVis(b, "npc")
 			if b.npcCurrent < #b.npcPets then
 				b.npcCurrent = b.npcCurrent + 1
-				b.log = b.log .. " " .. NPC_TRAINERS[b.npcIndex].name .. " envoie " .. b.npcPets[b.npcCurrent].name .. " !"
-				b.turn = "npc"
+				if b.npcPets[b.npcCurrent].isBoss then
+					-- le joueur garde la main quand le boss arrive
+					b.log = b.log .. " " .. NPC_TRAINERS[b.npcIndex].name .. " entre lui-même dans le combat !"
+					b.turn = "player"
+				else
+					b.log = b.log .. " " .. NPC_TRAINERS[b.npcIndex].name .. " envoie " .. b.npcPets[b.npcCurrent].name .. " !"
+					b.turn = "npc"
+				end
 			else
 				winBattle(player, b)
 				return
@@ -4280,7 +4357,7 @@ local function resolvePlayerStrike(player, b, damage, text, power)
 		end
 		sendBattleUpdate(player)
 		if b.active and b.turn == "npc" then
-			task.delay(1, function() processNPCAttack(player, b) end)
+			task.delay(0.6, function() processNPCAttack(player, b) end)
 		end
 	end)
 end
@@ -4295,7 +4372,9 @@ local function processPlayerAttack(player)
 	myPet.charge = math.min(myPet.maxCharge, myPet.charge + 33)
 	local crit = math.random() < 0.12
 	if crit then damage = math.floor(damage * 1.5) end
-	resolvePlayerStrike(player, b, damage, myPet.name .. " inflige " .. damage .. " degats !" .. (crit and " Coup critique !" or ""), crit and 2 or 1)
+	local note
+	damage, note = BossFight.strike(enemyPet, damage, false)
+	resolvePlayerStrike(player, b, damage, myPet.name .. " inflige " .. damage .. " degats !" .. (crit and " Coup critique !" or "") .. note, crit and 2 or 1)
 end
 
 local SPECIAL_ATTACKS = {
@@ -4315,7 +4394,9 @@ local function processPlayerSpecial(player, specialIndex)
 	if not special or myPet.charge < special.chargeRequired then return end
 	local damage = math.floor(myPet.attack * special.damageMult * (0.9 + math.random() * 0.2))
 	myPet.charge = math.max(0, myPet.charge - special.chargeRequired)
-	resolvePlayerStrike(player, b, damage, myPet.name .. " : " .. special.name .. " ! " .. damage .. " degats !", special.power)
+	local note
+	damage, note = BossFight.strike(enemyPet, damage, true)
+	resolvePlayerStrike(player, b, damage, myPet.name .. " : " .. special.name .. " ! " .. damage .. " degats !" .. note, special.power)
 end
 
 local function processPlayerSuper(player)
@@ -4327,7 +4408,23 @@ local function processPlayerSuper(player)
 	if myPet.charge < myPet.maxCharge then return end
 	local damage = math.floor(myPet.attack * 3 * (0.9 + math.random() * 0.2))
 	myPet.charge = 0
-	resolvePlayerStrike(player, b, damage, myPet.name .. " lance sa SUPER ATTAQUE ! " .. damage .. " degats !", 5)
+	local note
+	damage, note = BossFight.strike(enemyPet, damage, true)
+	resolvePlayerStrike(player, b, damage, myPet.name .. " lance sa SUPER ATTAQUE ! " .. damage .. " degats !" .. note, 5)
+end
+
+-- Proteger : encaisse moins sur la prochaine attaque et gagne un peu de charge
+function BossFight.guard(player)
+	local b = battles[player.UserId]
+	if not b or not b.active or b.turn ~= "player" then return end
+	local myPet = b.playerPets[b.playerCurrent]
+	if not myPet then return end
+	b.guard = true
+	myPet.charge = math.min(myPet.maxCharge, myPet.charge + 15)
+	b.log = myPet.name .. " se met en garde !"
+	b.turn = "npc"
+	sendBattleUpdate(player)
+	task.delay(0.6, function() processNPCAttack(player, b) end)
 end
 
 local function processPlayerSwitch(player)
@@ -4346,7 +4443,7 @@ local function processPlayerSwitch(player)
 	b.log = "Tu changes pour " .. b.playerPets[nxt].name .. " !"
 	b.turn = "npc"
 	sendBattleUpdate(player)
-	task.delay(1.2, function() processNPCAttack(player, b) end)
+	task.delay(0.7, function() processNPCAttack(player, b) end)
 end
 
 startBattle = function(player, npcIndex)
@@ -4401,6 +4498,18 @@ startBattle = function(player, npcIndex)
 		table.insert(npcPets, {
 			name = p.name, color = p.color, rarity = info and info.rarity or "Commun",
 			hp = p.hp, maxHp = p.hp, attack = p.attack, charge = 0, maxCharge = 100
+		})
+	end
+
+	if npc.boss and (npc.rank or 1) >= 2 then
+		local last = npc.pets[#npc.pets]
+		local lastInfo = PETS[last.name]
+		table.insert(npcPets, {
+			name = npc.name, color = npc.color, rarity = lastInfo and lastInfo.rarity or "Commun",
+			isBoss = true, mech = npc.mech, fxName = last.name, height = math.max(8, (npc.height or 30) * 0.4),
+			heat = npc.mech == "heat" and 0 or nil,
+			hp = math.floor(last.hp * 1.2), maxHp = math.floor(last.hp * 1.2),
+			attack = math.floor(last.attack * 1.1), charge = 0, maxCharge = 100
 		})
 	end
 
@@ -4494,6 +4603,7 @@ BattleAction.OnServerEvent:Connect(function(player, action)
 	if action == "attack" then processPlayerAttack(player)
 	elseif action == "flee" then abortBattle(player, "Defaite... Tu as fui le combat.")
 	elseif action == "switch" then processPlayerSwitch(player)
+	elseif action == "guard" then BossFight.guard(player)
 	elseif action == "super" then processPlayerSuper(player)
 	elseif action == "special1" then processPlayerSpecial(player, 1)
 	elseif action == "special2" then processPlayerSpecial(player, 2)
@@ -4715,6 +4825,39 @@ do
 		if delivered then sendState(player) end
 	end
 
+	-- trainee achetee : remise a chaque apparition du personnage
+	_G.MWS_ApplyTrail = function(player)
+		local s = states[player.UserId]
+		local char = player.Character
+		local hrp = char and char:FindFirstChild("HumanoidRootPart")
+		if not s or not hrp then return end
+		for _, name in ipairs({ "MWS_Trail", "MWS_TrailTop", "MWS_TrailBottom" }) do
+			local old = hrp:FindFirstChild(name)
+			if old then old:Destroy() end
+		end
+		local item = s.trail and byKey[s.trail]
+		local colors = item and type(item.reward) == "table" and item.reward.colors
+		if not colors then return end
+		local top = Instance.new("Attachment")
+		top.Name = "MWS_TrailTop"
+		top.Position = V3(0, 1, 0)
+		top.Parent = hrp
+		local bottom = Instance.new("Attachment")
+		bottom.Name = "MWS_TrailBottom"
+		bottom.Position = V3(0, -1.5, 0)
+		bottom.Parent = hrp
+		local trail = Instance.new("Trail")
+		trail.Name = "MWS_Trail"
+		trail.Attachment0 = top
+		trail.Attachment1 = bottom
+		trail.Color = ColorSequence.new(colorFromTable(colors[1]), colorFromTable(colors[2]))
+		trail.Lifetime = 0.7
+		trail.LightEmission = 0.6
+		trail.FaceCamera = true
+		trail.Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0.1), NumberSequenceKeypoint.new(1, 1) })
+		trail.Parent = hrp
+	end
+
 	-- donne la recompense d'un produit ; renvoie false si impossible, puis true si elle est mise en attente
 	local function grantReward(player, s, item)
 		local r = item.reward
@@ -4728,6 +4871,9 @@ do
 		elseif r.type == "luck" then
 			s.luckUntil = math.max(os.time(), s.luckUntil or 0) + (r.seconds or 60)
 			s.luckMult = r.mult or 2
+		elseif r.type == "trail" then
+			s.trail = item.key
+			_G.MWS_ApplyTrail(player)
 		elseif r.type == "pet" then
 			local info = PETS[r.pet]
 			if not info then warn("[MWS] Boutique : animal inconnu " .. tostring(r.pet)); return false end
@@ -4980,6 +5126,7 @@ local function onPlayerAdded(player)
 		end
 		task.wait(1)
 		applySpeedBoost(player)
+		if _G.MWS_ApplyTrail then _G.MWS_ApplyTrail(player) end
 		refreshPetVisuals(player)
 		-- renvoie les infos (le client n'est pas toujours pret lors du premier envoi)
 		sendState(player)
@@ -6217,6 +6364,11 @@ do
 		local player = Players:GetPlayers()[1]
 		local s = player and states[player.UserId]
 		if not s then return end
+		if type(names) == "string" then
+			s.trail = names
+			_G.MWS_ApplyTrail(player)
+			return
+		end
 		for _, n in ipairs(names) do
 			-- n = "Nom" ou { "Nom", size, mutation }
 			local size, mutation

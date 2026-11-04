@@ -18,6 +18,7 @@
 --   luck      -> { type = "luck", mult = 2, seconds = 900 }   (plus de chances d'animaux rares)
 --   pet       -> { type = "pet", pet = "Licorne" }            (nom EXACT de l'animal)
 --   coinsmult -> { type = "coinsmult", mult = 2 }             (passe : gains de coins x2 a vie)
+--   trail     -> { type = "trail", colors = { {r,g,b}, {r,g,b} } } (cosmetique : trainee du personnage)
 
 local Config = {}
 
@@ -48,19 +49,19 @@ Config.Items = {
 		reward = { type = "luck", mult = 2, seconds = 900 },
 	},
 	{
-		key = "pet_dragon", kind = "product", id = 0, price = 599, world = 1, limit = 1,
-		icon = "\u{1F984}", name = "Licorne", desc = "Monde 1 : la Licorne (Legendaire). 1 seule par joueur.",
-		reward = { type = "pet", pet = "Licorne" },
+		key = "trail_flammes", kind = "product", id = 0, price = 99, limit = 1,
+		icon = "\u{1F525}", name = "Trainee de flammes", desc = "Cosmetique : une trainee de feu derriere toi.",
+		reward = { type = "trail", colors = { {255, 200, 60}, {230, 50, 20} } },
 	},
 	{
-		key = "pet_w2", kind = "product", id = 0, price = 1299, world = 2, limit = 1,
-		icon = "\u{1F525}", name = "Dragon des ombres", desc = "Monde 2 : le Dragon des ombres (Divin). 1 seul par joueur.",
-		reward = { type = "pet", pet = "Dragon des ombres" },
+		key = "trail_sakura", kind = "product", id = 0, price = 99, limit = 1,
+		icon = "\u{1F338}", name = "Trainee de cerisier", desc = "Cosmetique : une trainee rose derriere toi.",
+		reward = { type = "trail", colors = { {255, 210, 230}, {240, 90, 170} } },
 	},
 	{
-		key = "pet_w3", kind = "product", id = 0, price = 2999, world = 3, limit = 1,
-		icon = "\u{2728}", name = "Dragon primordial", desc = "Monde 3 : le Dragon primordial (Secret). 1 seul par joueur.",
-		reward = { type = "pet", pet = "Dragon primordial" },
+		key = "trail_cosmos", kind = "product", id = 0, price = 199, limit = 1,
+		icon = "\u{2728}", name = "Trainee cosmique", desc = "Cosmetique : une trainee d'etoiles derriere toi.",
+		reward = { type = "trail", colors = { {120, 220, 255}, {110, 50, 220} } },
 	},
 	{
 		key = "pass_x2", kind = "gamepass", id = 0, price = 499,
