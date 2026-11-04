@@ -237,13 +237,13 @@ local NPC_TRAINERS = {
 			{ name = "Hibou des neiges",     hp = 300, attack = 40, color = {235, 240, 250} },
 			{ name = "Panda roux", hp = 400, attack = 50, color = {190, 85, 40} } },
 		reward = 1500 },
-	{ name = "Demon Mineur", world = 1, offset = V3(64, 0, -64), color = {50, 100, 255},
+	{ name = "Chevalier Creux", boss = "ChevalierCreux", world = 1, offset = V3(64, 0, -64), color = {140, 220, 70},
 		pets = {
 			{ name = "Pterodactyle", hp = 500, attack = 60, color = {150, 105, 65} },
 			{ name = "Dragon de glace",   hp = 600, attack = 70, color = {150, 205, 235} },
 			{ name = "Tigre",   hp = 550, attack = 65, color = {240, 150, 40} } },
 		reward = 3000 },
-	{ name = "Seigneur Demon", world = 1, offset = V3(88, 0, 56), color = {255, 50, 200},
+	{ name = "Grand Sylvain", boss = "GrandSylvain", world = 1, offset = V3(88, 0, 56), color = {90, 200, 90},
 		pets = {
 			{ name = "Dragon de lave",   hp = 800,  attack = 80,  color = {215, 75, 28} },
 			{ name = "Gorille",     hp = 900,  attack = 90,  color = {84, 84, 92} },
@@ -251,26 +251,26 @@ local NPC_TRAINERS = {
 			{ name = "Phenix",   hp = 1500, attack = 150, color = {245, 150, 40} } },
 		reward = 10000 },
 	-- Monde 2
-	{ name = "Golem de Braise", world = 2, offset = V3(-110, 0, 50), color = {255, 110, 40},
+	{ name = "Spectre d'Ossuaire", boss = "SpectreOssuaire", world = 2, offset = V3(-110, 0, 50), color = {80, 140, 255},
 		pets = {
 			{ name = "Crocodile", hp = 1800, attack = 180, color = {75, 151, 75} },
 			{ name = "Taureau de feu",  hp = 2200, attack = 220, color = {120, 40, 30} },
 			{ name = "Salamandre", hp = 3000, attack = 250, color = {226, 135, 45} } },
 		reward = 25000 },
-	{ name = "Dragon Volcanique", world = 2, offset = V3(110, 0, -60), color = {200, 40, 20},
+	{ name = "Ignareth", boss = "Ignareth", world = 2, offset = V3(110, 0, -60), color = {255, 110, 30},
 		pets = {
 			{ name = "Pegase", hp = 3500, attack = 320, color = {205, 228, 248} },
 			{ name = "Dragon des ombres",  hp = 5000, attack = 420, color = {92, 48, 142} } },
 		reward = 60000 },
 	-- Monde 3
-	{ name = "Horreur Cosmique", world = 3, offset = V3(-110, 0, 60), color = {170, 100, 255},
+	{ name = "Oni Celeste", boss = "OniCeleste", world = 3, offset = V3(-110, 0, 60), color = {255, 90, 190},
 		pets = {
 			{ name = "Yeti", hp = 6000, attack = 500, color = {190, 235, 250} },
 			{ name = "Kitsune",        hp = 6500, attack = 560, color = {245, 245, 255} },
 			{ name = "Roi serpent",    hp = 7000, attack = 620, color = {245, 205, 48} },
 			{ name = "Dragon cosmique",     hp = 9000, attack = 760, color = {55, 100, 225} } },
 		reward = 150000 },
-	{ name = "Titan Primordial", world = 3, offset = V3(110, 0, -60), color = {255, 255, 255},
+	{ name = "Neant Couronne", boss = "NeantCouronne", world = 3, offset = V3(110, 0, -60), color = {255, 220, 120},
 		pets = {
 			{ name = "Cerbere",    hp = 12000, attack = 900,  color = {80, 55, 80} },
 			{ name = "Dragon lunaire",     hp = 14000, attack = 1100, color = {212, 222, 240} },
@@ -1148,7 +1148,94 @@ end
 -- DRESSEURS
 -- ------------------------------------------------------------
 
+-- Boss geants : modeles ranges dans ServerStorage.MWS_Boss. Taille reelle sur la carte
+-- (scale = 1), taille reduite dans l'arene. Meme retour que createTrainerModel.
+local BOSS_ARENA_HEIGHT = 15
+
+local function createBossModel(npc, scale)
+	local folder = ServerStorage:FindFirstChild("MWS_Boss")
+	local template = folder and folder:FindFirstChild(npc.boss)
+	if not template then
+		warn("[MWS] Boss introuvable : " .. tostring(npc.boss))
+		return nil
+	end
+	local model = template:Clone()
+	local inArena = scale ~= 1
+	local boxCF, size = model:GetBoundingBox()
+	if inArena then
+		model:ScaleTo(model:GetScale() * BOSS_ARENA_HEIGHT / size.Y)
+		boxCF, size = model:GetBoundingBox()
+	end
+	local meshes = {}
+	for _, d in ipairs(model:GetDescendants()) do
+		if d:IsA("BasePart") then table.insert(meshes, d) end
+	end
+
+	local function helper(name, partSize, cf)
+		local part = Instance.new("Part")
+		part.Name = name
+		part.Size = partSize
+		part.CFrame = cf
+		part.Transparency = 1
+		part.Anchored = false
+		part.CanCollide = false
+		part.CanTouch = false
+		part.CanQuery = false
+		part.Massless = true
+		part.Parent = model
+		return part
+	end
+	local center = boxCF.Position
+	local feetY = center.Y - size.Y / 2
+	local root = helper("HumanoidRootPart", V3(1, 1, 1), CFrame.new(center.X, feetY + 2.1 * scale, center.Z))
+	root.Anchored = true
+	root.CanQuery = true
+	local head = helper("Head", V3(1, 1, 1), CFrame.new(center.X, feetY + size.Y, center.Z))
+	-- volume du corps : bloque le joueur sur la carte et sert de zone d'emission a l'aura
+	local bodyBox = helper("BossBody", V3(size.Y * 0.32, size.Y, size.Y * 0.27), CFrame.new(center))
+	bodyBox.CanCollide = not inArena
+	table.insert(meshes, head)
+	table.insert(meshes, bodyBox)
+
+	for _, part in ipairs(meshes) do
+		part.Anchored = false
+		part.CanCollide = part == bodyBox and not inArena
+		part.CanTouch = false
+		part.CanQuery = false
+		part.Massless = true
+		local weld = Instance.new("Weld")
+		weld.Part0 = root
+		weld.Part1 = part
+		weld.C0 = root.CFrame:Inverse() * part.CFrame
+		weld.Parent = root
+	end
+	model.PrimaryPart = root
+
+	local col = colorFromTable(npc.color)
+	local aura = Instance.new("ParticleEmitter")
+	aura.Color = ColorSequence.new(col)
+	aura.LightEmission = 0.6
+	aura.Size = NumberSequence.new({ NumberSequenceKeypoint.new(0, size.Y * 0.025), NumberSequenceKeypoint.new(1, 0) })
+	aura.Lifetime = NumberRange.new(1.5, 2.5)
+	aura.Rate = 12
+	aura.Speed = NumberRange.new(1, 3)
+	aura.SpreadAngle = Vector2.new(180, 180)
+	aura.Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0.2), NumberSequenceKeypoint.new(1, 1) })
+	aura.Parent = bodyBox
+	local light = Instance.new("PointLight")
+	light.Color = col
+	light.Brightness = 1.5
+	light.Range = math.min(size.Y, 40)
+	light.Parent = bodyBox
+
+	return model, root, head, { anims = {}, scale = scale }
+end
+
 local function createTrainerModel(npc, scale)
+	if npc.boss then
+		local bossModel, bossRoot, bossHead, bossP = createBossModel(npc, scale or 1)
+		if bossModel then return bossModel, bossRoot, bossHead, bossP end
+	end
 	local model = Instance.new("Model")
 	model.Name = "Monster"
 	local col = colorFromTable(npc.color)
@@ -2687,7 +2774,7 @@ local function buildCrystalKeepOut()
 			table.insert(list, { pos = o + V3(18, 0, (j - (#eggsHere + 1) / 2) * 20), r = 13 })
 		end
 		for _, npc in ipairs(NPC_TRAINERS) do
-			if npc.world == w then table.insert(list, { pos = o + npc.offset, r = 12 }) end
+			if npc.world == w then table.insert(list, { pos = o + npc.offset, r = npc.boss and 22 or 12 }) end
 		end
 		if TRAIN_PAD_CENTER[w] then table.insert(list, { pos = o + TRAIN_PAD_CENTER[w], r = 34 }) end
 		crystalKeepOut[w] = list
@@ -3135,7 +3222,7 @@ local function createNPCs()
 		local bb = Instance.new("BillboardGui")
 		bb.Size = UDim2.new(0, 220, 0, 50)
 		bb.StudsOffset = V3(0, 3.2, 0)
-		bb.MaxDistance = 80
+		bb.MaxDistance = npc.boss and 220 or 80
 		bb.Adornee = head
 		bb.Parent = head
 		local nameLabel = Instance.new("TextLabel")
@@ -3164,7 +3251,7 @@ local function createNPCs()
 		prompt.KeyboardKeyCode = Enum.KeyCode.E
 		prompt.ObjectText = npc.name
 		prompt.HoldDuration = 0.5
-		prompt.MaxActivationDistance = 15
+		prompt.MaxActivationDistance = npc.boss and 30 or 15
 		prompt.Parent = root
 		local npcIndex = i
 		prompt.Triggered:Connect(function(player)
