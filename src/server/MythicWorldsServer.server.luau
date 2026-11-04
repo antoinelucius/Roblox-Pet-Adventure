@@ -231,12 +231,6 @@ local NPC_TRAINERS = {
 			{ name = "Ours", hp = 200, attack = 25, color = {105, 64, 40} },
 			{ name = "Cerf",   hp = 300, attack = 30, color = {190, 140, 90} } },
 		reward = 500 },
-	{ name = "Spectre Errant", boss = "SpectreErrant", world = 1, offset = V3(-72, 0, 64), color = {200, 200, 220},
-		pets = {
-			{ name = "Tortue",  hp = 250, attack = 35, color = {75, 151, 75} },
-			{ name = "Hibou des neiges",     hp = 300, attack = 40, color = {235, 240, 250} },
-			{ name = "Panda roux", hp = 400, attack = 50, color = {190, 85, 40} } },
-		reward = 1500 },
 	{ name = "Chevalier Creux", boss = "ChevalierCreux", world = 1, offset = V3(64, 0, -64), color = {140, 220, 70},
 		pets = {
 			{ name = "Pterodactyle", hp = 500, attack = 60, color = {150, 105, 65} },
@@ -251,6 +245,12 @@ local NPC_TRAINERS = {
 			{ name = "Phenix",   hp = 1500, attack = 150, color = {245, 150, 40} } },
 		reward = 10000 },
 	-- Monde 2
+	{ name = "Golem de Lave", boss = "GolemDeLave", world = 2, offset = V3(-130, 0, -60), color = {255, 120, 40},
+		pets = {
+			{ name = "Gorille",        hp = 1300, attack = 130, color = {84, 84, 92} },
+			{ name = "Taureau de feu", hp = 1500, attack = 150, color = {120, 40, 30} },
+			{ name = "Salamandre",     hp = 1800, attack = 170, color = {226, 135, 45} } },
+		reward = 15000 },
 	{ name = "Spectre d'Ossuaire", boss = "SpectreOssuaire", world = 2, offset = V3(-110, 0, 50), color = {80, 140, 255},
 		pets = {
 			{ name = "Crocodile", hp = 1800, attack = 180, color = {75, 151, 75} },
@@ -263,6 +263,12 @@ local NPC_TRAINERS = {
 			{ name = "Dragon des ombres",  hp = 5000, attack = 420, color = {92, 48, 142} } },
 		reward = 60000 },
 	-- Monde 3
+	{ name = "Renard Celeste", boss = "RenardCeleste", world = 3, offset = V3(70, 0, 120), color = {255, 170, 210},
+		pets = {
+			{ name = "Pegase",         hp = 4200, attack = 380, color = {205, 228, 248} },
+			{ name = "Kitsune",        hp = 5000, attack = 440, color = {245, 245, 255} },
+			{ name = "Dragon lunaire", hp = 5600, attack = 480, color = {212, 222, 240} } },
+		reward = 90000 },
 	{ name = "Oni Celeste", boss = "OniCeleste", world = 3, offset = V3(-110, 0, 60), color = {255, 90, 190},
 		pets = {
 			{ name = "Yeti", hp = 6000, attack = 500, color = {190, 235, 250} },
@@ -284,12 +290,13 @@ do
 	local style = {
 		{ 12, false, "Hé hé ! Tu es sûr de vouloir m'affronter, petit ?", "Tes pets vont finir dans ma marmite !" },
 		{ 16, false, "Tu oses marcher sur mes terres ? Tu veux vraiment te battre ?", "Alors prépare-toi à être écrasé !" },
-		{ 20, true, "Je rôde ici depuis mille ans... Veux-tu vraiment me réveiller ?", "Ton courage va s'éteindre comme ma lanterne." },
-		{ 24, false, "Cette armure est vide... mais elle n'a jamais perdu. Es-tu prêt ?", "En garde, voyageur !" },
-		{ 28, false, "La forêt t'observe depuis ton arrivée. Oseras-tu me défier ?", "Mes racines vont t'engloutir !" },
-		{ 33, true, "Tous ceux qui m'ont défié reposent ici. Tu veux les rejoindre ?", "Ta place est déjà creusée." },
+		{ 21, false, "Cette armure est vide... mais elle n'a jamais perdu. Es-tu prêt ?", "En garde, voyageur !" },
+		{ 26, false, "La forêt t'observe depuis ton arrivée. Oseras-tu me défier ?", "Mes racines vont t'engloutir !" },
+		{ 30, false, "Mon corps brûle depuis la naissance du volcan. Tu veux vraiment t'y frotter ?", "Je vais te fondre comme de la cire !" },
+		{ 34, true, "Tous ceux qui m'ont défié reposent ici. Tu veux les rejoindre ?", "Ta place est déjà creusée." },
 		{ 38, false, "Un mortel devant le Prince des Cendres ? Tu es sûr de ton choix ?", "Brûle, et que tes cendres me servent de trône !" },
-		{ 44, false, "Ma lame n'est jamais sortie sans goûter la victoire. Tu insistes ?", "Alors danse avec les pétales !" },
+		{ 42, false, "Mes queues ont balayé des armées entières. Es-tu sûr de toi ?", "Attrape-moi, si tu le peux !" },
+		{ 46, false, "Ma lame n'est jamais sortie sans goûter la victoire. Tu insistes ?", "Alors danse avec les pétales !" },
 		{ 50, false, "Je suis la fin de toute chose. Tu veux vraiment défier le Néant ?", "Même les étoiles se sont inclinées. À ton tour !" },
 	}
 	for i, st in ipairs(style) do
@@ -1197,6 +1204,7 @@ local function createBossModel(npc, scale)
 			if n:find(key) then return "weapon" end
 		end
 		if n:find("wing") then return "wings" end
+		if n:find("tail") then return "tails" end
 		if n:find("cape") then return "cape" end
 		if n:find("halo") then return "halo" end
 		return "body"
@@ -1274,6 +1282,8 @@ local function createBossModel(npc, scale)
 			ax, amp = 1, 0.02
 		elseif group == "wings" then
 			pivot, ax, amp = V3(center.X, part.Position.Y, center.Z), 1, 0.06
+		elseif group == "tails" then
+			pivot, ay, amp = V3(center.X, feetY + size.Y * 0.35, center.Z), 1, 0.08
 		elseif group == "cape" then
 			pivot, ax, amp = part.Position + V3(0, part.Size.Y / 2, 0), 1, 0.03
 		end
@@ -1299,7 +1309,7 @@ local function createBossModel(npc, scale)
 	aura.Parent = bodyBox
 	local light = Instance.new("PointLight")
 	light.Color = col
-	light.Brightness = 0.6 + rank * 0.2
+	light.Brightness = math.min(1.2, 0.5 + rank * 0.1)
 	light.Range = math.min(size.Y, 40)
 	light.Parent = bodyBox
 	if rank >= 5 then
@@ -6218,5 +6228,5 @@ do
 	end)
 end
 -- DEBUGHOOK_END
-print("[MWS] Mythic Worlds Simulator v5 initialise : 3 mondes, 31 pets, 6 oeufs, 9 monstres.")
+print("[MWS] Mythic Worlds Simulator v5 initialise : 3 mondes, 31 pets, 6 oeufs, 10 monstres.")
 
