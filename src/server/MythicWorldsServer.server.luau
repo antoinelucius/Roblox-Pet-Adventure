@@ -4637,8 +4637,8 @@ do
 				return Enum.ProductPurchaseDecision.NotProcessedYet
 			end
 			if item.limit then s.bought[item.key] = (s.bought[item.key] or 0) + 1 end
+			-- jamais d'eviction : Roblox peut rejouer un ancien recu dans n'importe quel ordre
 			table.insert(s.receipts, rid)
-			while #s.receipts > 100 do table.remove(s.receipts, 1) end
 			sendState(player)
 			refreshPetVisuals(player)
 			if queued then
