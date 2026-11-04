@@ -220,18 +220,18 @@ local EGGS = {
 -- ============================================================
 
 local NPC_TRAINERS = {
-	{ name = "Gobelin Sauvage", world = 1, offset = V3(-64, 0, -48), color = {100, 200, 100},
+	{ name = "Gobelin Sauvage", boss = "GobelinSauvage", world = 1, offset = V3(-64, 0, -48), color = {100, 200, 100},
 		pets = {
 			{ name = "Poulet",    hp = 80,  attack = 10, color = {245, 245, 245} },
 			{ name = "Chien",  hp = 100, attack = 12, color = {160, 110, 70} } },
 		reward = 200 },
-	{ name = "Orque Brutal", world = 1, offset = V3(-88, 0, 8), color = {255, 160, 50},
+	{ name = "Orque Brutal", boss = "OrqueBrutal", world = 1, offset = V3(-88, 0, 8), color = {255, 160, 50},
 		pets = {
 			{ name = "Renard",    hp = 150, attack = 20, color = {226, 135, 45} },
 			{ name = "Ours", hp = 200, attack = 25, color = {105, 64, 40} },
 			{ name = "Cerf",   hp = 300, attack = 30, color = {190, 140, 90} } },
 		reward = 500 },
-	{ name = "Spectre Errant", world = 1, offset = V3(-72, 0, 64), color = {200, 200, 220},
+	{ name = "Spectre Errant", boss = "SpectreErrant", world = 1, offset = V3(-72, 0, 64), color = {200, 200, 220},
 		pets = {
 			{ name = "Tortue",  hp = 250, attack = 35, color = {75, 151, 75} },
 			{ name = "Hibou des neiges",     hp = 300, attack = 40, color = {235, 240, 250} },
@@ -278,6 +278,25 @@ local NPC_TRAINERS = {
 			{ name = "Dragon primordial",   hp = 25000, attack = 1800, color = {239, 184, 56} } },
 		reward = 500000 },
 }
+
+-- Classement des boss, du plus faible au plus fort : taille, flotte ou non, puis dialogue
+do
+	local style = {
+		{ 12, false, "Hé hé ! Tu es sûr de vouloir m'affronter, petit ?", "Tes pets vont finir dans ma marmite !" },
+		{ 16, false, "Tu oses marcher sur mes terres ? Tu veux vraiment te battre ?", "Alors prépare-toi à être écrasé !" },
+		{ 20, true, "Je rôde ici depuis mille ans... Veux-tu vraiment me réveiller ?", "Ton courage va s'éteindre comme ma lanterne." },
+		{ 24, false, "Cette armure est vide... mais elle n'a jamais perdu. Es-tu prêt ?", "En garde, voyageur !" },
+		{ 28, false, "La forêt t'observe depuis ton arrivée. Oseras-tu me défier ?", "Mes racines vont t'engloutir !" },
+		{ 33, true, "Tous ceux qui m'ont défié reposent ici. Tu veux les rejoindre ?", "Ta place est déjà creusée." },
+		{ 38, false, "Un mortel devant le Prince des Cendres ? Tu es sûr de ton choix ?", "Brûle, et que tes cendres me servent de trône !" },
+		{ 44, false, "Ma lame n'est jamais sortie sans goûter la victoire. Tu insistes ?", "Alors danse avec les pétales !" },
+		{ 50, false, "Je suis la fin de toute chose. Tu veux vraiment défier le Néant ?", "Même les étoiles se sont inclinées. À ton tour !" },
+	}
+	for i, st in ipairs(style) do
+		local npc = NPC_TRAINERS[i]
+		npc.rank, npc.height, npc.float, npc.lines = i, st[1], st[2], { st[3], st[4] }
+	end
+end
 
 -- ============================================================
 -- ETAT GLOBAL
@@ -1148,10 +1167,9 @@ end
 -- DRESSEURS
 -- ------------------------------------------------------------
 
--- Boss geants : modeles ranges dans ServerStorage.MWS_Boss. Taille reelle sur la carte
--- (scale = 1), taille reduite dans l'arene. Meme retour que createTrainerModel.
-local BOSS_ARENA_HEIGHT = 15
-
+-- Boss : modeles ranges dans ServerStorage.MWS_Boss. Taille reelle sur la carte (scale = 1),
+-- reduite dans l'arene. Plus le boss est fort (npc.rank), plus il a d'effets. Meme retour
+-- que l'ancien createTrainerModel. Chaque piece du modele bouge selon son nom.
 local function createBossModel(npc, scale)
 	local folder = ServerStorage:FindFirstChild("MWS_Boss")
 	local template = folder and folder:FindFirstChild(npc.boss)
@@ -1161,14 +1179,40 @@ local function createBossModel(npc, scale)
 	end
 	local model = template:Clone()
 	local inArena = scale ~= 1
+	local rank = npc.rank or 1
+	local height = npc.height or 30
+	if inArena then height = math.max(8, height * 0.4) end
+	local _, startSize = model:GetBoundingBox()
+	model:ScaleTo(model:GetScale() * height / startSize.Y)
 	local boxCF, size = model:GetBoundingBox()
-	if inArena then
-		model:ScaleTo(model:GetScale() * BOSS_ARENA_HEIGHT / size.Y)
-		boxCF, size = model:GetBoundingBox()
+
+	local function groupOf(name)
+		local n = string.lower(name)
+		if n:find("left arm") then return "left" end
+		if n:find("right arm") then return "right" end
+		for _, key in ipairs({ "head", "skull", "helmet", "horn", "antler" }) do
+			if n:find(key) then return "head" end
+		end
+		for _, key in ipairs({ "sword", "scythe", "club", "axe", "staff", "lantern" }) do
+			if n:find(key) then return "weapon" end
+		end
+		if n:find("wing") then return "wings" end
+		if n:find("cape") then return "cape" end
+		if n:find("halo") then return "halo" end
+		return "body"
 	end
-	local meshes = {}
+	local meshes, neck, shoulder = {}, nil, {}
 	for _, d in ipairs(model:GetDescendants()) do
-		if d:IsA("BasePart") then table.insert(meshes, d) end
+		if d:IsA("BasePart") then
+			local group = groupOf(d.Name)
+			table.insert(meshes, { part = d, group = group })
+			if group == "head" then
+				local bottom = d.Position - V3(0, d.Size.Y / 2, 0)
+				if not neck or bottom.Y < neck.Y then neck = bottom end
+			elseif group == "left" or group == "right" then
+				shoulder[group] = d.Position + V3(0, d.Size.Y * 0.4, 0)
+			end
+		end
 	end
 
 	local function helper(name, partSize, cf)
@@ -1193,21 +1237,52 @@ local function createBossModel(npc, scale)
 	local head = helper("Head", V3(1, 1, 1), CFrame.new(center.X, feetY + size.Y, center.Z))
 	-- volume du corps : bloque le joueur sur la carte et sert de zone d'emission a l'aura
 	local bodyBox = helper("BossBody", V3(size.Y * 0.32, size.Y, size.Y * 0.27), CFrame.new(center))
-	bodyBox.CanCollide = not inArena
-	table.insert(meshes, head)
-	table.insert(meshes, bodyBox)
 
-	for _, part in ipairs(meshes) do
+	local function attach(part, pivot)
 		part.Anchored = false
 		part.CanCollide = part == bodyBox and not inArena
 		part.CanTouch = false
 		part.CanQuery = false
 		part.Massless = true
+		local at = CFrame.new(pivot or part.Position)
 		local weld = Instance.new("Weld")
 		weld.Part0 = root
 		weld.Part1 = part
-		weld.C0 = root.CFrame:Inverse() * part.CFrame
+		weld.C0 = root.CFrame:Inverse() * at
+		weld.C1 = part.CFrame:Inverse() * at
 		weld.Parent = root
+		return weld
+	end
+	attach(head)
+	attach(bodyBox)
+
+	-- respiration pour tous, flottement pour les fantomes, petits gestes selon la piece
+	local anims = {}
+	local phase = math.random() * 6
+	local speed = npc.float and 1.2 or 1.6
+	local bob = V3(0, size.Y * (npc.float and 0.035 or 0.008), 0)
+	for _, entry in ipairs(meshes) do
+		local part, group = entry.part, entry.group
+		local pivot, ax, ay, az, amp = nil, 0, 0, 0, 0
+		if group == "head" then
+			pivot, ax, ay, amp = neck, 0.5, 1, 0.07
+		elseif group == "left" then
+			pivot, az, amp = shoulder.left, 1, 0.06
+		elseif group == "right" or (group == "weapon" and shoulder.right) then
+			pivot, az, amp = shoulder.right, -1, 0.06
+		elseif group == "weapon" then
+			ax, amp = 1, 0.02
+		elseif group == "wings" then
+			pivot, ax, amp = V3(center.X, part.Position.Y, center.Z), 1, 0.06
+		elseif group == "cape" then
+			pivot, ax, amp = part.Position + V3(0, part.Size.Y / 2, 0), 1, 0.03
+		end
+		local weld = attach(part, pivot)
+		if group == "halo" then
+			table.insert(anims, { weld = weld, base = weld.C0, part = part, ax = 0, ay = 0, az = 1, amp = 1, speed = 0.4, phase = phase, spin = true })
+		else
+			table.insert(anims, { weld = weld, base = weld.C0, part = part, ax = ax, ay = ay, az = az, amp = amp, speed = speed, phase = phase, move = bob })
+		end
 	end
 	model.PrimaryPart = root
 
@@ -1215,20 +1290,49 @@ local function createBossModel(npc, scale)
 	local aura = Instance.new("ParticleEmitter")
 	aura.Color = ColorSequence.new(col)
 	aura.LightEmission = 0.6
-	aura.Size = NumberSequence.new({ NumberSequenceKeypoint.new(0, size.Y * 0.025), NumberSequenceKeypoint.new(1, 0) })
+	aura.Size = NumberSequence.new({ NumberSequenceKeypoint.new(0, size.Y * 0.02), NumberSequenceKeypoint.new(1, 0) })
 	aura.Lifetime = NumberRange.new(1.5, 2.5)
-	aura.Rate = 12
+	aura.Rate = 4 + rank * 3
 	aura.Speed = NumberRange.new(1, 3)
 	aura.SpreadAngle = Vector2.new(180, 180)
 	aura.Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0.2), NumberSequenceKeypoint.new(1, 1) })
 	aura.Parent = bodyBox
 	local light = Instance.new("PointLight")
 	light.Color = col
-	light.Brightness = 1.5
+	light.Brightness = 0.6 + rank * 0.2
 	light.Range = math.min(size.Y, 40)
 	light.Parent = bodyBox
+	if rank >= 5 then
+		-- etincelles qui montent
+		local sparks = Instance.new("ParticleEmitter")
+		sparks.Color = ColorSequence.new(col:Lerp(WHITE, 0.5))
+		sparks.LightEmission = 1
+		sparks.Size = NumberSequence.new({ NumberSequenceKeypoint.new(0, size.Y * 0.012), NumberSequenceKeypoint.new(1, 0) })
+		sparks.Lifetime = NumberRange.new(2, 3)
+		sparks.Rate = rank * 2
+		sparks.Speed = NumberRange.new(size.Y * 0.1, size.Y * 0.2)
+		sparks.EmissionDirection = Enum.NormalId.Top
+		sparks.Parent = bodyBox
+	end
+	-- orbes en orbite autour des boss les plus forts
+	local orbCount = rank >= 8 and 10 or (rank >= 6 and 6 or 0)
+	for k = 1, orbCount do
+		local orb = helper("BossOrb", V3(1, 1, 1) * size.Y * 0.035, root.CFrame)
+		orb.Shape = Enum.PartType.Ball
+		orb.Material = M.Neon
+		orb.Color = col
+		orb.Transparency = 0
+		orb.Anchored = false
+		local weld = Instance.new("Weld")
+		weld.Part0 = root
+		weld.Part1 = orb
+		weld.C0 = CFrame.new(0, size.Y * 0.45, 0)
+		weld.C1 = CFrame.new(-size.Y * 0.42, 0, 0)
+		weld.Parent = root
+		table.insert(anims, { weld = weld, base = weld.C0, part = orb, ax = 0, ay = 1, az = 0, amp = 1, speed = 0.7, phase = k / orbCount * math.pi * 2, spin = true })
+	end
 
-	return model, root, head, { anims = {}, scale = scale }
+	return model, root, head, { anims = anims, scale = scale }
 end
 
 local function createTrainerModel(npc, scale)
@@ -1374,7 +1478,7 @@ local function sendNPCInfo(player)
 				if idx == i then defeated = true break end
 			end
 		end
-		npcData[i] = { name = npc.name, color = npc.color, reward = npc.reward, petCount = #npc.pets, defeated = defeated, world = npc.world }
+		npcData[i] = { name = npc.name, color = npc.color, reward = npc.reward, petCount = #npc.pets, defeated = defeated, world = npc.world, lines = npc.lines }
 	end
 	local needed, done = 0, 0
 	if s then needed, done = rebirthRequirement(s) end
@@ -3219,6 +3323,7 @@ end
 -- ---------- DRESSEURS DANS LE MONDE ----------
 
 local function createNPCs()
+	local BossDialog = getRemote("BossDialog")
 	for i, npc in ipairs(NPC_TRAINERS) do
 		local o = worldOrigin[npc.world]
 		local pos = o + npc.offset + V3(0, 2.1, 0)
@@ -3260,12 +3365,17 @@ local function createNPCs()
 		prompt.KeyboardKeyCode = Enum.KeyCode.E
 		prompt.ObjectText = npc.name
 		prompt.HoldDuration = 0.5
-		prompt.MaxActivationDistance = npc.boss and 30 or 15
+		prompt.MaxActivationDistance = npc.boss and (12 + (npc.height or 30) * 0.4) or 15
 		prompt.Parent = root
 		local npcIndex = i
 		prompt.Triggered:Connect(function(player)
 			if _G.MWS_TutLock and _G.MWS_TutLock(player, "battle", npcIndex) then return end
-			startBattle(player, npcIndex)
+			-- le boss parle d'abord : le client relance le combat par BattleRequest
+			if npc.lines and not battles[player.UserId] then
+				BossDialog:FireClient(player, npcIndex)
+			else
+				startBattle(player, npcIndex)
+			end
 		end)
 	end
 end

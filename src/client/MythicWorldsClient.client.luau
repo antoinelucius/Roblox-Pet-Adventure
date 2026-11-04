@@ -1211,6 +1211,122 @@ end
 -- COMBAT PANEL LOGIC
 -- ============================================================
 
+-- Dialogue du boss avant le combat : question, reponse du joueur, derniere replique, combat
+local showBossDialog
+do
+    local frame = Instance.new("Frame")
+    frame.Name = "BossDialog"
+    frame.AnchorPoint = Vector2.new(0.5, 1)
+    frame.Position = UDim2.new(0.5, 0, 1, -30)
+    frame.Size = UDim2.new(0.92, 0, 0, 170)
+    frame.BackgroundColor3 = Color3.fromRGB(20, 18, 30)
+    frame.BackgroundTransparency = 0.05
+    frame.ZIndex = 40
+    frame.Visible = false
+    makeCorner(frame, 14)
+    local limit = Instance.new("UISizeConstraint")
+    limit.MaxSize = Vector2.new(620, 170)
+    limit.Parent = frame
+    local border = Instance.new("UIStroke")
+    border.Thickness = 3
+    border.Parent = frame
+    frame.Parent = gui
+
+    local nameLabel = Instance.new("TextLabel")
+    nameLabel.BackgroundTransparency = 1
+    nameLabel.Position = UDim2.new(0, 18, 0, 10)
+    nameLabel.Size = UDim2.new(1, -36, 0, 26)
+    nameLabel.Font = Enum.Font.GothamBlack
+    nameLabel.TextSize = 20
+    nameLabel.TextXAlignment = Enum.TextXAlignment.Left
+    nameLabel.ZIndex = 41
+    nameLabel.Parent = frame
+
+    local textLabel = Instance.new("TextLabel")
+    textLabel.BackgroundTransparency = 1
+    textLabel.Position = UDim2.new(0, 18, 0, 40)
+    textLabel.Size = UDim2.new(1, -36, 0, 66)
+    textLabel.Font = Enum.Font.GothamMedium
+    textLabel.TextSize = 18
+    textLabel.TextColor3 = Color3.fromRGB(240, 240, 245)
+    textLabel.TextWrapped = true
+    textLabel.TextXAlignment = Enum.TextXAlignment.Left
+    textLabel.TextYAlignment = Enum.TextYAlignment.Top
+    textLabel.ZIndex = 41
+    textLabel.Parent = frame
+
+    local function makeButton(text, color, xScale, xOffset)
+        local button = Instance.new("TextButton")
+        button.AnchorPoint = Vector2.new(xScale, 1)
+        button.Position = UDim2.new(xScale, xOffset, 1, -12)
+        button.Size = UDim2.new(0.5, -24, 0, 40)
+        button.BackgroundColor3 = color
+        button.Text = text
+        button.TextColor3 = Color3.fromRGB(255, 255, 255)
+        button.Font = Enum.Font.GothamBold
+        button.TextSize = 15
+        button.ZIndex = 41
+        makeCorner(button, 10)
+        button.Parent = frame
+        return button
+    end
+    local yesButton = makeButton("Oui, je te défie !", Color3.fromRGB(205, 55, 60), 0, 18)
+    local noButton = makeButton("Non, pas maintenant", Color3.fromRGB(70, 70, 90), 1, -18)
+
+    local serial = 0
+    local current
+    local function say(text)
+        serial = serial + 1
+        local mine = serial
+        textLabel.Text = text
+        textLabel.MaxVisibleGraphemes = 0
+        for i = 1, utf8.len(text) or #text do
+            if serial ~= mine then return end
+            textLabel.MaxVisibleGraphemes = i
+            task.wait(0.02)
+        end
+        textLabel.MaxVisibleGraphemes = -1
+    end
+
+    showBossDialog = function(index)
+        local npc = npcData[index]
+        if not npc or not npc.lines then
+            BattleRequest:FireServer(index)
+            return
+        end
+        if frame.Visible then return end
+        current = index
+        local c = npc.color or { 255, 255, 255 }
+        local color = Color3.fromRGB(c[1], c[2], c[3])
+        nameLabel.Text = npc.name
+        nameLabel.TextColor3 = color
+        border.Color = color
+        yesButton.Visible = true
+        noButton.Visible = true
+        frame.Visible = true
+        task.spawn(say, npc.lines[1])
+    end
+
+    yesButton.Activated:Connect(function()
+        local index = current
+        local npc = index and npcData[index]
+        if not npc then return end
+        current = nil
+        yesButton.Visible = false
+        noButton.Visible = false
+        say(npc.lines[2])
+        task.wait(1.2)
+        frame.Visible = false
+        BattleRequest:FireServer(index)
+    end)
+    noButton.Activated:Connect(function()
+        current = nil
+        serial = serial + 1
+        frame.Visible = false
+    end)
+    remotes:WaitForChild("BossDialog").OnClientEvent:Connect(showBossDialog)
+end
+
 local function refreshCombatPanel()
     for _, child in ipairs(combatScroll:GetChildren()) do
         if child:IsA("Frame") then child:Destroy() end
@@ -1280,7 +1396,7 @@ local function refreshCombatPanel()
         fightBtn.Parent = row
         fightBtn.MouseButton1Click:Connect(function()
             combatPanel.Visible = false
-            BattleRequest:FireServer(i)
+            showBossDialog(i)
         end)
     end
 
