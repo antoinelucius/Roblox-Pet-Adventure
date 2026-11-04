@@ -58,6 +58,7 @@ local bossMusic = makeTrack("bossMusic", BOSS_MUSIC_ID)
 
 local muted = false
 local currentTrack = music
+local fades = {}
 local function trackVolume(track)
 	if muted or track ~= currentTrack then return 0 end
 	return track == music and MUSIC_VOLUME or BATTLE_VOLUME
@@ -70,7 +71,9 @@ local function setMusic(track)
 		track:Play()
 	end
 	for _, item in ipairs({ music, battleMusic, bossMusic }) do
-		TweenService:Create(item, TweenInfo.new(0.8), { Volume = trackVolume(item) }):Play()
+		if fades[item] then fades[item]:Cancel() end
+		fades[item] = TweenService:Create(item, TweenInfo.new(0.8), { Volume = trackVolume(item) })
+		fades[item]:Play()
 	end
 end
 
@@ -94,12 +97,13 @@ screen.DisplayOrder = 5
 screen.Parent = player:WaitForChild("PlayerGui")
 local toggle = Instance.new("TextButton")
 toggle.Name = "SoundToggle"
+-- a cote de Renaissance, dans le menu de gauche : visible aussi sur telephone
 toggle.AnchorPoint = Vector2.new(0, 0)
-toggle.Position = UDim2.new(0, 418, 0, 20)
-toggle.Size = UDim2.new(0, 40, 0, 26)
+toggle.Position = UDim2.new(0, 141, 0, 276)
+toggle.Size = UDim2.new(0, 120, 0, 36)
 toggle.BackgroundColor3 = Color3.fromRGB(40, 40, 58)
-toggle.Text = "\u{1F50A}"
-toggle.TextSize = 16
+toggle.Text = "\u{1F50A} Son"
+toggle.TextSize = 14
 toggle.Font = Enum.Font.GothamBold
 toggle.TextColor3 = Color3.fromRGB(255, 255, 255)
 local corner = Instance.new("UICorner")
@@ -108,11 +112,22 @@ corner.Parent = toggle
 toggle.Parent = screen
 toggle.Activated:Connect(function()
 	muted = not muted
-	toggle.Text = muted and "\u{1F507}" or "\u{1F50A}"
-	for _, item in ipairs({ music, battleMusic, bossMusic }) do item.Volume = trackVolume(item) end
+	toggle.Text = muted and "\u{1F507} Muet" or "\u{1F50A} Son"
+	for _, item in ipairs({ music, battleMusic, bossMusic }) do
+		if fades[item] then fades[item]:Cancel() end
+		item.Volume = trackVolume(item)
+	end
+	if muted then
+		for _, sound in pairs(bank) do sound:Stop() end
+	end
 	-- sons joues dans le monde (sacs de frappe)
 	local worldGroup = SoundService:FindFirstChild("MWS_WorldSounds")
 	if worldGroup then worldGroup.Volume = muted and 0 or 1 end
+end)
+
+-- le groupe des sacs de frappe peut arriver apres un clic sur Muet
+SoundService.ChildAdded:Connect(function(child)
+	if child.Name == "MWS_WorldSounds" and child:IsA("SoundGroup") then child.Volume = muted and 0 or 1 end
 end)
 
 -- clic sur tous les boutons de l'interface

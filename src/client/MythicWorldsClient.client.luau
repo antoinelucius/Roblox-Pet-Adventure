@@ -2475,6 +2475,7 @@ do
         },
     }
     local shopNav = Instance.new("Frame")
+    shopNav.Name = "ShopNav"
     shopNav.Position = UDim2.new(1, -108, 0, 72)
     shopNav.Size = UDim2.new(0, 98, 1, -80)
     shopNav.BackgroundTransparency = 1
@@ -2721,6 +2722,24 @@ do
     -- ---------- boutique ----------
     local function refreshShop()
         local keepY = shopScroll.CanvasPosition.Y
+        -- petit ecran : menu plus etroit et cartes en une colonne, pour garder les textes lisibles
+        local panelWidth = shopScroll.Parent.AbsoluteSize.X
+        local narrow = panelWidth < 520
+        local nav = shopScroll.Parent:FindFirstChild("ShopNav")
+        local navWidth = narrow and 70 or 98
+        nav.Size = UDim2.new(0, navWidth, 1, -80)
+        nav.Position = UDim2.new(1, -navWidth - 8, 0, 72)
+        shopScroll.Size = UDim2.new(1, -navWidth - 26, 1, -80)
+        for _, navButton in ipairs(nav:GetChildren()) do
+            if navButton:IsA("TextButton") then
+                navButton.Size = UDim2.new(1, 0, 0, narrow and 62 or 72)
+                for _, navLabel in ipairs(navButton:GetChildren()) do
+                    if navLabel:IsA("TextLabel") and navLabel.TextSize < 20 then navLabel.TextSize = narrow and 10 or 12 end
+                    if navLabel:IsA("TextLabel") and navLabel.TextSize >= 20 then navLabel.Position = UDim2.new(0, 0, 0, narrow and 2 or 6) end
+                    if navLabel:IsA("TextLabel") and navLabel.TextSize < 20 then navLabel.Position = UDim2.new(0, 0, 0, narrow and 40 or 46) end
+                end
+            end
+        end
         for _, child in ipairs(shopScroll:GetChildren()) do
             if child:IsA("Frame") or child:IsA("TextLabel") then child:Destroy() end
         end
@@ -2761,7 +2780,9 @@ do
                 group.ZIndex = 6
                 group.Parent = shopScroll
                 local grid = Instance.new("UIGridLayout")
-                grid.CellSize = UDim2.new(1 / section.columns, -8, 0, 226)
+                local columns = section.columns
+                if narrow then columns = 1 elseif panelWidth < 720 then columns = 2 end
+                grid.CellSize = UDim2.new(1 / columns, -8, 0, 226)
                 grid.CellPadding = UDim2.new(0, 8, 0, 8)
                 grid.SortOrder = Enum.SortOrder.LayoutOrder
                 grid.Parent = group
@@ -2928,6 +2949,10 @@ do
         end
         shopScroll.CanvasPosition = Vector2.new(0, keepY)
     end
+
+    shopScroll.Parent:GetPropertyChangedSignal("AbsoluteSize"):Connect(function()
+        if shopScroll.Parent.Visible then refreshShop() end
+    end)
 
     ShopInfo.OnClientEvent:Connect(function(list, meta)
         shopItems = list or {}

@@ -1241,7 +1241,8 @@ local function createBossModel(npc, scale)
 	end
 	local center = boxCF.Position
 	local feetY = center.Y - size.Y / 2
-	local root = helper("HumanoidRootPart", V3(1, 1, 1), CFrame.new(center.X, feetY + 2.1 * scale, center.Z))
+	-- les modeles regardent vers +Z : la racine est retournee pour regarder comme eux
+	local root = helper("HumanoidRootPart", V3(1, 1, 1), CFrame.new(center.X, feetY + 2.1 * scale, center.Z) * CFrame.Angles(0, math.pi, 0))
 	root.Anchored = true
 	root.CanQuery = true
 	local head = helper("Head", V3(1, 1, 1), CFrame.new(center.X, feetY + size.Y, center.Z))
@@ -1357,7 +1358,7 @@ local function createBossModel(npc, scale)
 			if a.armSide then
 				a.base = a.base0 * CFrame.Angles(0, 0, a.armSide * 2 * k)
 			elseif a.isHead then
-				a.base = a.base0 * CFrame.Angles(0.5 * k, 0, 0)
+				a.base = a.base0 * CFrame.Angles(-0.5 * k, 0, 0)
 			end
 		end
 	end
