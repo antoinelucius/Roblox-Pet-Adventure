@@ -1409,7 +1409,7 @@ end
 -- ============================================================
 
 local function newState()
-	return { coins = START_COINS, pets = {}, equipped = {}, defeatedNPCs = {}, bossVersion = 2, rebirthLevel = 0, unlockedWorld = 1, nextPetId = 1, speedBoostUntil = 0, luckUntil = 0, luckMult = 1, receipts = {}, bought = {} }
+	return { coins = START_COINS, pets = {}, equipped = {}, defeatedNPCs = {}, bossVersion = 2, potions = {}, rebirthLevel = 0, unlockedWorld = 1, nextPetId = 1, speedBoostUntil = 0, luckUntil = 0, luckMult = 1, receipts = {}, bought = {} }
 end
 
 local function getEquippedPets(s)
@@ -1581,7 +1581,7 @@ function Saves.snapshot(s)
 		pendingPets = table.clone(s.pendingPets or {}),
 		tut = s.tut, tutProg = s.tutProg, dex = Saves.deepCopy(s.dex), dexClaimed = Saves.deepCopy(s.dexClaimed),
 		daily = Saves.deepCopy(s.daily), quests = Saves.deepCopy(s.quests),
-		auraColor = s.auraColor, trail = s.trail,
+		auraColor = s.auraColor, trail = s.trail, potions = Saves.deepCopy(s.potions or {}),
 		lastSeen = os.time(),
 	}
 end
@@ -1630,6 +1630,13 @@ local function loadPlayer(player)
 	s.pendingPets = pendingPets
 	if type(s.auraColor) ~= "string" then s.auraColor = "auto" end
 	if type(s.trail) ~= "string" then s.trail = nil end
+	local cleanPotions = {}
+	if type(s.potions) == "table" then
+		for key, count in pairs(s.potions) do
+			if type(key) == "string" then cleanPotions[key] = math.floor(finiteNumber(count, 0, 0, 1000000)) end
+		end
+	end
+	s.potions = cleanPotions
 	local cleanPets, ownedIds, maxId = {}, {}, 0
 	for _, pet in ipairs(s.pets) do
 		if type(pet) == "table" and PETS[pet.name] and type(pet.id) == "number" then
@@ -4772,7 +4779,7 @@ do
 			-- article propre a un monde : visible uniquement dans ce monde
 			if not item.world or item.world == myWorld then
 				table.insert(list, {
-					key = item.key, name = item.name, desc = item.desc, icon = item.icon, kind = item.kind,
+					key = item.key, name = item.name, desc = item.desc, icon = item.icon, kind = item.kind, section = item.section,
 					available = type(item.id) == "number" and item.id > 0,
 					price = fetchPrice(item) or item.price,
 					owned = (item.kind == "gamepass" and s.passes ~= nil and s.passes[item.key] == true)
@@ -4783,7 +4790,11 @@ do
 			end
 		end
 		if not player.Parent then return end
-		ShopInfo:FireClient(player, list, { speedUntil = s.speedBoostUntil or 0, luckUntil = s.luckUntil or 0, now = os.time() })
+		local potionList = {}
+		for _, def in ipairs(ShopConfig.Potions or {}) do
+			table.insert(potionList, { key = def.key, name = def.name, icon = def.icon, effect = def.effect, count = s.potions[def.key] or 0 })
+		end
+		ShopInfo:FireClient(player, list, { speedUntil = s.speedBoostUntil or 0, luckUntil = s.luckUntil or 0, now = os.time(), potions = potionList })
 	end
 
 	local function scheduleSpeedEnd(player)
@@ -4873,6 +4884,8 @@ do
 		elseif r.type == "luck" then
 			s.luckUntil = math.max(os.time(), s.luckUntil or 0) + (r.seconds or 60)
 			s.luckMult = r.mult or 2
+		elseif r.type == "potion" then
+			s.potions[r.potion] = (s.potions[r.potion] or 0) + (r.count or 1)
 		elseif r.type == "trail" then
 			s.trail = item.key
 			_G.MWS_ApplyTrail(player)
@@ -5007,6 +5020,34 @@ do
 			s.trail = key
 		end
 		_G.MWS_ApplyTrail(player)
+		task.spawn(sendShopInfo, player)
+	end)
+
+	-- utilise une potion de l'inventaire : l'effet s'ajoute au temps restant
+	local potionUseAt = {}
+	getRemote("UsePotion").OnServerEvent:Connect(function(player, key)
+		if type(key) ~= "string" then return end
+		local now = os.clock()
+		if potionUseAt[player.UserId] and now - potionUseAt[player.UserId] < 0.3 then return end
+		potionUseAt[player.UserId] = now
+		local s = states[player.UserId]
+		if not s then return end
+		local def
+		for _, p in ipairs(ShopConfig.Potions or {}) do
+			if p.key == key then def = p end
+		end
+		if not def or (s.potions[key] or 0) < 1 then return end
+		s.potions[key] = s.potions[key] - 1
+		if key == "luck" then
+			s.luckUntil = math.max(os.time(), s.luckUntil or 0) + def.seconds
+			s.luckMult = math.max(s.luckMult or 1, def.mult or 2)
+		else
+			s.speedBoostUntil = math.max(os.time(), s.speedBoostUntil or 0) + def.seconds
+			applySpeedBoost(player)
+			scheduleSpeedEnd(player)
+		end
+		notify(player, def.name .. " : " .. def.effect .. " !", Color3.fromRGB(120, 255, 180))
+		sendState(player)
 		task.spawn(sendShopInfo, player)
 	end)
 
@@ -5986,9 +6027,8 @@ do
 		s.coins = s.coins + reward
 		local extra = ""
 		if idx == 7 then
-			s.luckUntil = math.max(os.time(), s.luckUntil or 0) + 900
-			s.luckMult = math.max(s.luckMult or 1, 2)
-			extra = " + potion de chance 15 min"
+			s.potions.luck = (s.potions.luck or 0) + 1
+			extra = " + 1 potion de chance"
 		end
 		s.daily.day, s.daily.streak = d, streak
 		notify(player, "Jour " .. streak .. " : +" .. fmt(reward) .. " coins" .. extra .. " !", GOLD)
@@ -6006,6 +6046,18 @@ do
 				local reward = math.floor(q.base * scale(s))
 				s.coins = s.coins + reward
 				notify(player, "Quete terminee : +" .. fmt(reward) .. " coins !", GOLD)
+				-- toutes les quetes du jour finies : 1 potion gratuite
+				local allDone = true
+				for _, other in ipairs(todaysQuests(today())) do
+					if not s.quests.claimed[other.id] then allDone = false end
+				end
+				if allDone then
+					local key = (math.random() < 0.5) and "luck" or "speed"
+					s.potions[key] = (s.potions[key] or 0) + 1
+					task.delay(1.5, function()
+						if player.Parent then notify(player, "Quetes du jour finies : +1 potion ! Regarde dans la boutique.", GOLD) end
+					end)
+				end
 				sendState(player)
 				savePlayer(player)
 				sendMeta(player)

@@ -2394,12 +2394,67 @@ do
         return f, sc, status
     end
 
-    local shopPanel, shopScroll, shopStatus = makePanel("\u{1F6D2} Boutique Robux", 620, 520)
-    local shopGrid = Instance.new("UIGridLayout")
-    shopGrid.CellSize = UDim2.new(0.5, -6, 0, 150)
-    shopGrid.CellPadding = UDim2.new(0, 8, 0, 8)
-    shopGrid.SortOrder = Enum.SortOrder.LayoutOrder
-    shopGrid.Parent = shopScroll
+    local shopPanel, shopScroll, shopStatus = makePanel("\u{1F6D2} Boutique", 860, 560)
+    shopScroll.Size = UDim2.new(1, -126, 1, -80)
+    local shopList = Instance.new("UIListLayout")
+    shopList.Padding = UDim.new(0, 10)
+    shopList.SortOrder = Enum.SortOrder.LayoutOrder
+    shopList.Parent = shopScroll
+    -- parties de la boutique + menu de droite qui fait defiler jusqu'a chacune
+    local shopUI = {
+        headers = {},
+        sections = {
+            { key = "coins",  title = "PIÈCES",   icon = "\u{1F4B0}", color = Color3.fromRGB(60, 190, 90),  columns = 3 },
+            { key = "boosts", title = "POTIONS",  icon = "\u{1F9EA}", color = Color3.fromRGB(150, 90, 240), columns = 3 },
+            { key = "trails", title = "TRAÎNÉES", icon = "\u{2728}",  color = Color3.fromRGB(230, 90, 190), columns = 3 },
+            { key = "passes", title = "PASSES",   icon = "\u{1F451}", color = Color3.fromRGB(240, 190, 50), columns = 2 },
+        },
+    }
+    local shopNav = Instance.new("Frame")
+    shopNav.Position = UDim2.new(1, -108, 0, 72)
+    shopNav.Size = UDim2.new(0, 98, 1, -80)
+    shopNav.BackgroundTransparency = 1
+    shopNav.ZIndex = 6
+    shopNav.Parent = shopPanel
+    local shopNavList = Instance.new("UIListLayout")
+    shopNavList.Padding = UDim.new(0, 8)
+    shopNavList.SortOrder = Enum.SortOrder.LayoutOrder
+    shopNavList.Parent = shopNav
+    for i, section in ipairs(shopUI.sections) do
+        local nav = Instance.new("TextButton")
+        nav.LayoutOrder = i
+        nav.Size = UDim2.new(1, 0, 0, 72)
+        nav.BackgroundColor3 = section.color:Lerp(Color3.new(0, 0, 0), 0.45)
+        nav.Text = ""
+        nav.ZIndex = 7
+        makeCorner(nav, 10)
+        nav.Parent = shopNav
+        local navIcon = Instance.new("TextLabel")
+        navIcon.Size = UDim2.new(1, 0, 0, 40)
+        navIcon.Position = UDim2.new(0, 0, 0, 6)
+        navIcon.BackgroundTransparency = 1
+        navIcon.Text = section.icon
+        navIcon.TextSize = 28
+        navIcon.Font = Enum.Font.GothamBold
+        navIcon.ZIndex = 8
+        navIcon.Parent = nav
+        local navText = Instance.new("TextLabel")
+        navText.Size = UDim2.new(1, 0, 0, 20)
+        navText.Position = UDim2.new(0, 0, 0, 46)
+        navText.BackgroundTransparency = 1
+        navText.Text = section.title
+        navText.TextColor3 = Color3.fromRGB(255, 255, 255)
+        navText.Font = Enum.Font.GothamBlack
+        navText.TextSize = 12
+        navText.ZIndex = 8
+        navText.Parent = nav
+        nav.MouseButton1Click:Connect(function()
+            local header = shopUI.headers[section.key]
+            if not header then return end
+            local y = header.AbsolutePosition.Y - shopScroll.AbsolutePosition.Y + shopScroll.CanvasPosition.Y
+            TweenService:Create(shopScroll, TweenInfo.new(0.35, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { CanvasPosition = Vector2.new(0, y) }):Play()
+        end)
+    end
 
     local worldPanel, worldScroll = makePanel("\u{1F30D} Mondes", 520, 420)
     local worldLayout = Instance.new("UIListLayout")
@@ -2601,86 +2656,154 @@ do
 
     -- ---------- boutique ----------
     local function refreshShop()
-        for _, c in ipairs(shopScroll:GetChildren()) do
-            if c:IsA("Frame") then c:Destroy() end
+        local keepY = shopScroll.CanvasPosition.Y
+        for _, child in ipairs(shopScroll:GetChildren()) do
+            if child:IsA("Frame") or child:IsA("TextLabel") then child:Destroy() end
         end
-        for i, item in ipairs(shopItems) do
-            local card = Instance.new("Frame")
-            card.LayoutOrder = i
-            card.BackgroundColor3 = Color3.fromRGB(40, 40, 58)
-            card.ZIndex = 6
-            makeCorner(card, 12)
-            card.Parent = shopScroll
-
-            local icon = Instance.new("TextLabel")
-            icon.Size = UDim2.new(0, 56, 0, 56)
-            icon.Position = UDim2.new(0, 10, 0, 10)
-            icon.BackgroundColor3 = Color3.fromRGB(60, 55, 90)
-            icon.Text = item.icon or "?"
-            icon.TextScaled = true
-            icon.Font = Enum.Font.GothamBold
-            icon.TextColor3 = WHITE
-            icon.ZIndex = 7
-            makeCorner(icon, 10)
-            icon.Parent = card
-
-            local nameL = Instance.new("TextLabel")
-            nameL.Size = UDim2.new(1, -84, 0, 26)
-            nameL.Position = UDim2.new(0, 76, 0, 10)
-            nameL.BackgroundTransparency = 1
-            nameL.Text = item.name or ""
-            nameL.TextColor3 = Color3.fromRGB(255, 230, 120)
-            nameL.Font = Enum.Font.GothamBold
-            nameL.TextSize = 16
-            nameL.TextXAlignment = Enum.TextXAlignment.Left
-            nameL.TextTruncate = Enum.TextTruncate.AtEnd
-            nameL.ZIndex = 7
-            nameL.Parent = card
-
-            local descL = Instance.new("TextLabel")
-            descL.Size = UDim2.new(1, -84, 0, 44)
-            descL.Position = UDim2.new(0, 76, 0, 36)
-            descL.BackgroundTransparency = 1
-            descL.Text = item.desc or ""
-            descL.TextColor3 = Color3.fromRGB(210, 210, 220)
-            descL.Font = Enum.Font.Gotham
-            descL.TextSize = 12
-            descL.TextWrapped = true
-            descL.TextXAlignment = Enum.TextXAlignment.Left
-            descL.TextYAlignment = Enum.TextYAlignment.Top
-            descL.ZIndex = 7
-            descL.Parent = card
-
-            local buy = Instance.new("TextButton")
-            buy.Size = UDim2.new(1, -20, 0, 36)
-            buy.Position = UDim2.new(0, 10, 1, -46)
-            buy.Font = Enum.Font.GothamBold
-            buy.TextSize = 16
-            buy.TextColor3 = WHITE
-            buy.ZIndex = 7
-            makeCorner(buy, 8)
-            if item.owned and item.trail then
-                buy.Text = item.equipped and "Retirer" or "Équiper"
-                buy.BackgroundColor3 = item.equipped and Color3.fromRGB(150, 70, 80) or Color3.fromRGB(50, 110, 200)
-            elseif item.owned then
-                buy.Text = "\u{2714} Possede"
-                buy.BackgroundColor3 = Color3.fromRGB(60, 120, 70)
-            elseif not item.available then
-                buy.Text = "Bientot"
-                buy.BackgroundColor3 = Color3.fromRGB(80, 80, 95)
-            else
-                buy.Text = "R$ " .. tostring(item.price or "?")
-                buy.BackgroundColor3 = Color3.fromRGB(0, 150, 90)
+        shopUI.headers = {}
+        for sectionIndex, section in ipairs(shopUI.sections) do
+            local items = {}
+            for _, item in ipairs(shopItems) do
+                if (item.section or "boosts") == section.key then table.insert(items, item) end
             end
-            buy.Parent = card
-            buy.MouseButton1Click:Connect(function()
-                if item.owned and item.trail then
-                    remotes:WaitForChild("SetTrail"):FireServer(item.equipped and "" or item.key)
-                elseif not item.owned then
-                    ShopBuy:FireServer(item.key)
+            if section.key == "boosts" then
+                -- les potions du joueur passent avant les lots a acheter
+                for i, potion in ipairs(shopMeta.potions or {}) do
+                    table.insert(items, i, {
+                        inventory = true, key = potion.key, name = potion.name, icon = potion.icon,
+                        desc = potion.effect .. "\nTu en as " .. potion.count, count = potion.count,
+                    })
                 end
-            end)
+            end
+            if #items > 0 then
+                local header = Instance.new("TextLabel")
+                header.LayoutOrder = sectionIndex * 2
+                header.Size = UDim2.new(1, -10, 0, 34)
+                header.BackgroundTransparency = 1
+                header.Text = "— " .. section.title .. " —"
+                header.TextColor3 = section.color:Lerp(WHITE, 0.25)
+                header.Font = Enum.Font.FredokaOne
+                header.TextSize = 24
+                header.TextStrokeTransparency = 0.5
+                header.ZIndex = 7
+                header.Parent = shopScroll
+                shopUI.headers[section.key] = header
+
+                local group = Instance.new("Frame")
+                group.LayoutOrder = sectionIndex * 2 + 1
+                group.Size = UDim2.new(1, -10, 0, 0)
+                group.AutomaticSize = Enum.AutomaticSize.Y
+                group.BackgroundTransparency = 1
+                group.ZIndex = 6
+                group.Parent = shopScroll
+                local grid = Instance.new("UIGridLayout")
+                grid.CellSize = UDim2.new(1 / section.columns, -8, 0, 196)
+                grid.CellPadding = UDim2.new(0, 8, 0, 8)
+                grid.SortOrder = Enum.SortOrder.LayoutOrder
+                grid.Parent = group
+
+                for i, item in ipairs(items) do
+                    local card = Instance.new("Frame")
+                    card.LayoutOrder = i
+                    card.BackgroundColor3 = WHITE
+                    card.ZIndex = 7
+                    makeCorner(card, 12)
+                    card.Parent = group
+                    local shade = Instance.new("UIGradient")
+                    shade.Color = ColorSequence.new(section.color, section.color:Lerp(Color3.new(0, 0, 0), 0.65))
+                    shade.Rotation = 90
+                    shade.Parent = card
+                    local edge = Instance.new("UIStroke")
+                    edge.Color = section.color:Lerp(WHITE, 0.35)
+                    edge.Thickness = 2
+                    edge.Parent = card
+
+                    local icon = Instance.new("TextLabel")
+                    icon.Size = UDim2.new(1, 0, 0, 74)
+                    icon.Position = UDim2.new(0, 0, 0, 6)
+                    icon.BackgroundTransparency = 1
+                    icon.Text = item.icon or "?"
+                    icon.TextSize = 56
+                    icon.Font = Enum.Font.GothamBold
+                    icon.TextColor3 = WHITE
+                    icon.ZIndex = 8
+                    icon.Parent = card
+
+                    local nameL = Instance.new("TextLabel")
+                    nameL.Size = UDim2.new(1, -16, 0, 24)
+                    nameL.Position = UDim2.new(0, 8, 0, 80)
+                    nameL.BackgroundTransparency = 1
+                    nameL.Text = item.name or ""
+                    nameL.TextColor3 = WHITE
+                    nameL.Font = Enum.Font.GothamBlack
+                    nameL.TextSize = 16
+                    nameL.TextStrokeTransparency = 0.4
+                    nameL.TextTruncate = Enum.TextTruncate.AtEnd
+                    nameL.ZIndex = 8
+                    nameL.Parent = card
+
+                    local descL = Instance.new("TextLabel")
+                    descL.Size = UDim2.new(1, -16, 0, 34)
+                    descL.Position = UDim2.new(0, 8, 0, 104)
+                    descL.BackgroundTransparency = 1
+                    descL.Text = item.desc or ""
+                    descL.TextColor3 = Color3.fromRGB(235, 235, 240)
+                    descL.Font = Enum.Font.GothamMedium
+                    descL.TextSize = 12
+                    descL.TextWrapped = true
+                    descL.TextYAlignment = Enum.TextYAlignment.Top
+                    descL.ZIndex = 8
+                    descL.Parent = card
+
+                    local buy = Instance.new("TextButton")
+                    buy.Size = UDim2.new(1, -16, 0, 40)
+                    buy.Position = UDim2.new(0, 8, 1, -48)
+                    buy.Font = Enum.Font.FredokaOne
+                    buy.TextSize = 21
+                    buy.TextColor3 = WHITE
+                    buy.TextStrokeTransparency = 0.2
+                    buy.ZIndex = 8
+                    makeCorner(buy, 10)
+                    -- etiquette : relief clair en haut, contour sombre
+                    local shine = Instance.new("UIGradient")
+                    shine.Color = ColorSequence.new(WHITE, Color3.fromRGB(165, 165, 165))
+                    shine.Rotation = 90
+                    shine.Parent = buy
+                    local outline = Instance.new("UIStroke")
+                    outline.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+                    outline.Color = Color3.fromRGB(15, 35, 15)
+                    outline.Thickness = 3
+                    outline.Parent = buy
+                    if item.inventory then
+                        buy.Text = item.count > 0 and "Utiliser" or "Aucune"
+                        buy.BackgroundColor3 = item.count > 0 and Color3.fromRGB(150, 90, 240) or Color3.fromRGB(80, 80, 95)
+                    elseif item.owned and item.trail then
+                        buy.Text = item.equipped and "Retirer" or "Équiper"
+                        buy.BackgroundColor3 = item.equipped and Color3.fromRGB(150, 70, 80) or Color3.fromRGB(50, 110, 200)
+                    elseif item.owned then
+                        buy.Text = "\u{2714} Possédé"
+                        buy.BackgroundColor3 = Color3.fromRGB(60, 120, 70)
+                    elseif not item.available then
+                        buy.Text = "Bientôt"
+                        buy.BackgroundColor3 = Color3.fromRGB(80, 80, 95)
+                    else
+                        buy.Text = "\u{E002} " .. tostring(item.price or "?")
+                        buy.BackgroundColor3 = Color3.fromRGB(95, 235, 30)
+                    end
+                    buy.Parent = card
+                    buy.MouseButton1Click:Connect(function()
+                        if item.inventory then
+                            if item.count > 0 then remotes:WaitForChild("UsePotion"):FireServer(item.key) end
+                        elseif item.owned and item.trail then
+                            remotes:WaitForChild("SetTrail"):FireServer(item.equipped and "" or item.key)
+                        elseif not item.owned then
+                            ShopBuy:FireServer(item.key)
+                        end
+                    end)
+                end
+            end
         end
+        shopScroll.CanvasPosition = Vector2.new(0, keepY)
     end
 
     ShopInfo.OnClientEvent:Connect(function(list, meta)

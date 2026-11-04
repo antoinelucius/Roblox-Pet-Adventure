@@ -12,62 +12,90 @@
 -- Options d'un article :
 --   world = N  -> l'article n'apparait et ne s'achete QUE quand le joueur est dans le monde N
 --   limit = N  -> nombre maximum d'achats par joueur (1 = un seul achat a vie)
+--   section    -> partie de la boutique : "coins", "boosts", "trails" ou "passes"
 -- Recompenses possibles (reward.type) :
 --   coins     -> { type = "coins", amount = 10000 }
 --   speed     -> { type = "speed", seconds = 600 }            (boost de vitesse x2)
 --   luck      -> { type = "luck", mult = 2, seconds = 900 }   (plus de chances d'animaux rares)
 --   pet       -> { type = "pet", pet = "Licorne" }            (nom EXACT de l'animal)
 --   coinsmult -> { type = "coinsmult", mult = 2 }             (passe : gains de coins x2 a vie)
+--   potion    -> { type = "potion", potion = "luck", count = 3 } (ajoute des potions a l'inventaire)
 --   trail     -> { type = "trail", colors = { {r,g,b}, {r,g,b} } } (cosmetique : trainee du personnage)
 
 local Config = {}
 
 Config.Items = {
 	{
-		key = "coins_s", kind = "product", id = 3728204521, price = 49,
+		key = "coins_s", section = "coins", kind = "product", id = 3728204521, price = 49,
 		icon = "\u{1F4B5}", name = "Pack de pieces S", desc = "+10 000 coins",
 		reward = { type = "coins", amount = 10000 },
 	},
 	{
-		key = "coins_m", kind = "product", id = 3728204674, price = 199,
+		key = "coins_m", section = "coins", kind = "product", id = 3728204674, price = 199,
 		icon = "\u{1F4B0}", name = "Pack de pieces M", desc = "+100 000 coins",
 		reward = { type = "coins", amount = 100000 },
 	},
 	{
-		key = "coins_l", kind = "product", id = 3728204806, price = 999,
+		key = "coins_l", section = "coins", kind = "product", id = 3728204806, price = 999,
 		icon = "\u{1F4B8}", name = "Pack de pieces L", desc = "+1 000 000 coins",
 		reward = { type = "coins", amount = 1000000 },
 	},
 	{
-		key = "speed10", kind = "product", id = 3728204836, price = 29,
-		icon = "\u{26A1}", name = "Boost de vitesse", desc = "Vitesse x2 pendant 10 minutes",
-		reward = { type = "speed", seconds = 600 },
+		key = "luck15", section = "boosts", kind = "product", id = 3728204985, price = 99,
+		icon = "\u{1F340}", name = "Chance x1", desc = "1 potion de chance a garder",
+		reward = { type = "potion", potion = "luck", count = 1 },
 	},
 	{
-		key = "luck15", kind = "product", id = 3728204985, price = 99,
-		icon = "\u{1F340}", name = "Potion de chance", desc = "Chance x2 sur les animaux rares pendant 15 minutes",
-		reward = { type = "luck", mult = 2, seconds = 900 },
+		key = "luck_x3", section = "boosts", kind = "product", id = 3728215316, price = 249,
+		icon = "\u{1F340}", name = "Chance x3", desc = "3 potions de chance a garder",
+		reward = { type = "potion", potion = "luck", count = 3 },
 	},
 	{
-		key = "trail_flammes", kind = "product", id = 3728205027, price = 99, limit = 1,
+		key = "luck_x10", section = "boosts", kind = "product", id = 3728215351, price = 699,
+		icon = "\u{1F340}", name = "Chance x10", desc = "10 potions de chance a garder",
+		reward = { type = "potion", potion = "luck", count = 10 },
+	},
+	{
+		key = "speed10", section = "boosts", kind = "product", id = 3728204836, price = 29,
+		icon = "\u{26A1}", name = "Vitesse x1", desc = "1 potion de vitesse a garder",
+		reward = { type = "potion", potion = "speed", count = 1 },
+	},
+	{
+		key = "speed_x3", section = "boosts", kind = "product", id = 3728215390, price = 69,
+		icon = "\u{26A1}", name = "Vitesse x3", desc = "3 potions de vitesse a garder",
+		reward = { type = "potion", potion = "speed", count = 3 },
+	},
+	{
+		key = "speed_x10", section = "boosts", kind = "product", id = 3728215415, price = 199,
+		icon = "\u{26A1}", name = "Vitesse x10", desc = "10 potions de vitesse a garder",
+		reward = { type = "potion", potion = "speed", count = 10 },
+	},
+	{
+		key = "trail_flammes", section = "trails", kind = "product", id = 3728205027, price = 99, limit = 1,
 		icon = "\u{1F525}", name = "Trainee de flammes", desc = "Cosmetique : une trainee de feu derriere toi.",
 		reward = { type = "trail", colors = { {255, 200, 60}, {230, 50, 20} } },
 	},
 	{
-		key = "trail_sakura", kind = "product", id = 3728205071, price = 99, limit = 1,
+		key = "trail_sakura", section = "trails", kind = "product", id = 3728205071, price = 99, limit = 1,
 		icon = "\u{1F338}", name = "Trainee de cerisier", desc = "Cosmetique : une trainee rose derriere toi.",
 		reward = { type = "trail", colors = { {255, 210, 230}, {240, 90, 170} } },
 	},
 	{
-		key = "trail_cosmos", kind = "product", id = 3728205113, price = 199, limit = 1,
+		key = "trail_cosmos", section = "trails", kind = "product", id = 3728205113, price = 199, limit = 1,
 		icon = "\u{2728}", name = "Trainee cosmique", desc = "Cosmetique : une trainee d'etoiles derriere toi.",
 		reward = { type = "trail", colors = { {120, 220, 255}, {110, 50, 220} } },
 	},
 	{
-		key = "pass_x2", kind = "gamepass", id = 2071248448, price = 499,
+		key = "pass_x2", section = "passes", kind = "gamepass", id = 2071248448, price = 499,
 		icon = "\u{1F451}", name = "Gains x2", desc = "Double les revenus de tes pets et les cristaux, a vie",
 		reward = { type = "coinsmult", mult = 2 },
 	},
+}
+
+-- Potions gardees dans l'inventaire du joueur : il choisit quand les utiliser
+Config.Potions = {
+	{ key = "luck", name = "Potion de chance", icon = "\u{1F340}", seconds = 900, mult = 2, effect = "Chance x2 pendant 15 min" },
+	{ key = "speed", name = "Potion de vitesse", icon = "\u{26A1}", seconds = 600, effect = "Vitesse x2 pendant 10 min" },
 }
 
 return Config
