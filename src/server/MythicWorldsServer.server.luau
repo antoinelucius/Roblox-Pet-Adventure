@@ -294,7 +294,7 @@ do
 		{ 26, false, "La forêt t'observe depuis ton arrivée. Oseras-tu me défier ?", "Mes racines vont t'engloutir !" },
 		{ 30, false, "Mon corps brûle depuis la naissance du volcan. Tu veux vraiment t'y frotter ?", "Je vais te fondre comme de la cire !", "heat" },
 		{ 34, true, "Tous ceux qui m'ont défié reposent ici. Tu veux les rejoindre ?", "Ta place est déjà creusée." },
-		{ 38, false, "Un mortel devant le Prince des Cendres ? Tu es sûr de ton choix ?", "Brûle, et que tes cendres me servent de trône !" },
+		{ 38, true, "Un mortel devant le Prince des Cendres ? Tu es sûr de ton choix ?", "Brûle, et que tes cendres me servent de trône !" },
 		{ 42, false, "Mes queues ont balayé des armées entières. Es-tu sûr de toi ?", "Attrape-moi, si tu le peux !" },
 		{ 46, false, "Ma lame n'est jamais sortie sans goûter la victoire. Tu insistes ?", "Alors danse avec les pétales !" },
 		{ 50, false, "Je suis la fin de toute chose. Tu veux vraiment défier le Néant ?", "Même les étoiles se sont inclinées. À ton tour !" },
@@ -1181,12 +1181,15 @@ end
 -- que l'ancien createTrainerModel. Chaque piece du modele bouge selon son nom.
 local function createBossModel(npc, scale)
 	local folder = ServerStorage:FindFirstChild("MWS_Boss")
-	local template = folder and folder:FindFirstChild(npc.boss)
+	-- boss en briques (MWS_BossBricks) en priorite, sinon le modele du dossier
+	local bricks = ServerStorage:FindFirstChild("MWS_BossBricks")
+	local built = bricks and require(bricks).build(npc.boss)
+	local template = built or (folder and folder:FindFirstChild(npc.boss))
 	if not template then
 		warn("[MWS] Boss introuvable : " .. tostring(npc.boss))
 		return nil
 	end
-	local model = template:Clone()
+	local model = built or template:Clone()
 	local inArena = scale ~= 1
 	local rank = npc.rank or 1
 	local height = npc.height or 30
@@ -1220,7 +1223,7 @@ local function createBossModel(npc, scale)
 				local bottom = d.Position - V3(0, d.Size.Y / 2, 0)
 				if not neck or bottom.Y < neck.Y then neck = bottom end
 			elseif group == "left" or group == "right" then
-				shoulder[group] = d.Position + V3(0, d.Size.Y * 0.4, 0)
+				shoulder[group] = shoulder[group] or (d.Position + V3(0, d.Size.Y * 0.4, 0))
 			end
 		end
 	end
@@ -1272,14 +1275,38 @@ local function createBossModel(npc, scale)
 	local phase = math.random() * 6
 	local speed = npc.float and 1.2 or 1.6
 	local bob = V3(0, size.Y * (npc.float and 0.035 or 0.008), 0)
+	-- une seule piece animee par groupe : les autres lui sont soudees
+	local leaders = {}
 	for _, entry in ipairs(meshes) do
 		local part, group = entry.part, entry.group
+		local leader = leaders[group]
+		if leader then
+			part.Anchored = false
+			part.CanCollide = false
+			part.CanTouch = false
+			part.CanQuery = false
+			part.Massless = true
+			local link = Instance.new("Weld")
+			link.Part0 = leader
+			link.Part1 = part
+			link.C0 = leader.CFrame:Inverse() * part.CFrame
+			link.Parent = leader
+			continue
+		end
+		leaders[group] = part
 		local pivot, ax, ay, az, amp = nil, 0, 0, 0, 0
+		-- l'arme suit le bras qui la tient : l'epaule la plus proche
+		local weaponArm = nil
+		if group == "weapon" and (shoulder.left or shoulder.right) then
+			local toLeft = shoulder.left and (part.Position - shoulder.left).Magnitude or math.huge
+			local toRight = shoulder.right and (part.Position - shoulder.right).Magnitude or math.huge
+			weaponArm = toLeft < toRight and "left" or "right"
+		end
 		if group == "head" then
 			pivot, ax, ay, amp = neck, 0.5, 1, 0.07
-		elseif group == "left" then
+		elseif group == "left" or weaponArm == "left" then
 			pivot, az, amp = shoulder.left, 1, 0.06
-		elseif group == "right" or (group == "weapon" and shoulder.right) then
+		elseif group == "right" or weaponArm == "right" then
 			pivot, az, amp = shoulder.right, -1, 0.06
 		elseif group == "weapon" then
 			ax, amp = 1, 0.02
@@ -1297,8 +1324,8 @@ local function createBossModel(npc, scale)
 			local entry = { weld = weld, base = weld.C0, base0 = weld.C0, part = part, ax = ax, ay = ay, az = az, amp = amp, speed = speed, phase = phase, move = bob }
 			if group == "head" then
 				entry.isHead = true
-			elseif group == "left" or group == "right" or (group == "weapon" and shoulder.right) then
-				local armPivot = (group == "left") and shoulder.left or shoulder.right
+			elseif group == "left" or group == "right" or weaponArm then
+				local armPivot = (group == "left" or weaponArm == "left") and shoulder.left or shoulder.right
 				entry.armSide = (armPivot.X >= center.X) and 1 or -1
 			end
 			table.insert(anims, entry)

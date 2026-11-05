@@ -1,4 +1,4 @@
--- MWS_PetBricks : animaux en briques lego (Plastic + studs), construits par code.
+-- MWS_PetBricks : animaux en briques lego (Plastic + peau Inlet), construits par code.
 -- Convention : l'avant regarde vers -Z, Y vers le haut, les pieds sont a y = 0 (unites de conception ~ 1 stud).
 -- Les modeles sont dans les sous-modules (Farm, Cold, Wild, Dragons) : chacun renvoie function(DEFS, H).
 local Bricks = {}
@@ -241,7 +241,9 @@ function Bricks.assemble(name, opts)
 		part.Color = col
 		if e.eye then part.Name = "Eye" end
 		part.Material = e.neon and Enum.Material.Neon or Enum.Material.Plastic
-		part.TopSurface = (not e.neon and part.Size.X >= 0.85 and part.Size.Z >= 0.85) and Enum.SurfaceType.Studs or Enum.SurfaceType.Smooth
+		-- peau en briques "Inlet" (MaterialService), la meme que sur les arbres
+		part.MaterialVariant = e.neon and "" or "Inlet"
+		part.TopSurface = Enum.SurfaceType.Smooth
 		part.BottomSurface = Enum.SurfaceType.Smooth
 		if e.trans then part.Transparency = e.trans end
 		part.CastShadow = math.max(part.Size.X, part.Size.Y, part.Size.Z) >= 1.4
