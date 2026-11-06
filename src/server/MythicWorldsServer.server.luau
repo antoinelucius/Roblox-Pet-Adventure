@@ -5311,10 +5311,9 @@ do
 
 	local function onSettingsPlayer(player)
 		task.spawn(function()
-			local waited = 0
-			while not states[player.UserId] and player.Parent and waited < 30 do
+			-- pas de limite de temps : le chargement finit, ou le joueur part (ou est renvoye)
+			while not states[player.UserId] and player.Parent do
 				task.wait(0.25)
-				waited = waited + 0.25
 			end
 			local s = states[player.UserId]
 			if not s or not player.Parent or type(s.settings) ~= "table" then return end
