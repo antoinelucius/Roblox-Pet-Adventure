@@ -3598,6 +3598,7 @@ do
         b.TextSize = 14
         b.TextScaled = false
     end
+    gui:SetAttribute("MenuReady", true)   -- MWS_MobileHud attend ce signal
 
     -- les anciens boutons ferment aussi les nouveaux panneaux
     for _, b in ipairs({ invButton, eggButton, combatButton }) do

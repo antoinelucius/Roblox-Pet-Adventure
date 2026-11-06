@@ -3013,9 +3013,6 @@ local function applyCrystalTier(info, tier)
 	end
 	info.emitter.Color = ColorSequence.new(tier.tint or CRYSTAL_THEME[info.world].color)
 	info.emitter.Rate = tier.tint and 10 or 2
-	info.label.Enabled = tier.tint ~= nil
-	info.labelText.Text = tier.name .. " x" .. tier.mult
-	if tier.tint then info.labelText.TextColor3 = tier.tint end
 end
 
 local function placeCrystal(info, pos)
@@ -3131,25 +3128,6 @@ local function createCrystals(w, avoid)
 					end)
 				end
 			end
-			-- etiquette de rarete (visible seulement pour les cristaux rares)
-				local lbb = Instance.new("BillboardGui")
-				lbb.Size = UDim2.new(0, 160, 0, 30)
-				lbb.StudsOffset = V3(0, 4, 0)
-				lbb.AlwaysOnTop = true
-				lbb.MaxDistance = 120
-				lbb.Enabled = false
-				lbb.Adornee = root
-				lbb.Parent = root
-				local ltxt = Instance.new("TextLabel")
-				ltxt.Size = UDim2.new(1, 0, 1, 0)
-				ltxt.BackgroundTransparency = 1
-				ltxt.Font = Enum.Font.GothamBlack
-				ltxt.TextSize = 16
-				ltxt.TextStrokeTransparency = 0.3
-				ltxt.TextColor3 = WHITE
-				ltxt.Parent = lbb
-				info.label = lbb
-				info.labelText = ltxt
 				applyCrystalTier(info, rollCrystalTier())
 				table.insert(crystals, info)
 		end
