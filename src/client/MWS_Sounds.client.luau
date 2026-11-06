@@ -206,6 +206,8 @@ remotes:WaitForChild("BuyEgg").OnClientEvent:Connect(function(data)
 		play("charge", 2.5)
 		play("boom", 3.5)
 		play("reveal", 3.8)
+	elseif player:GetAttribute("MWS_SetEggs") == false then
+		play("reveal")   -- pas d'animation d'oeuf : juste le son du resultat
 	else
 		play("egg", 0.5)
 		play("egg", 1.2)

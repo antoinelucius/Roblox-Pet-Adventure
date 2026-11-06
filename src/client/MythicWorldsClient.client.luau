@@ -2323,6 +2323,17 @@ BuyEgg.OnClientEvent:Connect(function(data)
     end
     if data.success then
         local pet = data.pet
+        if player:GetAttribute("MWS_SetEggs") == false then
+            -- parametre "Voir mes oeufs" coupe : le resultat seul, sans l'animation
+            hatchFrame.Visible = true
+            hatchFrame.BackgroundTransparency = 0.7
+            hatchLabel.Text = pet.name .. " !"
+            hatchLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+            hatchLabel.TextSize = 26
+            task.wait(1.2)
+            hatchFrame.Visible = false
+            return
+        end
         local style = data.fusion and "fusion" or (data.style or "base")
         local tier = EGG_TIER[style] or 1
         if pet.rarity == "Secret" or pet.rarity == "Divin" then tier = 3 end

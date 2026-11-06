@@ -2025,6 +2025,7 @@ local function spawnPetVisual(player, petData, slot)
 		addFusionAura(model, root, petData.tier, P.ext or V3(3, 3, 3) * P.scale, base)
 	end
 
+	model:SetAttribute("MWS_Owner", player.UserId)   -- MWS_Settings : voir ou cacher ces pets
 	model.Parent = petsFolder
 	pcall(function() root:SetNetworkOwner(nil) end)
 
@@ -5287,12 +5288,15 @@ do
 	local SETTINGS = {
 		music = { attribute = "MWS_SetMusic", volume = true },
 		sfx = { attribute = "MWS_SetSfx", volume = true },
+		otherPets = { attribute = "MWS_SetOtherPets" },
+		myPets = { attribute = "MWS_SetMyPets" },
+		eggs = { attribute = "MWS_SetEggs" },
 		names = { attribute = "MWS_SetNames" },
 		shake = { attribute = "MWS_SetShake" },
 	}
 	local function isValid(rule, value)
 		if rule.volume then
-			return type(value) == "number" and value >= 0 and value <= 100 and value % 25 == 0
+			return type(value) == "number" and value >= 0 and value <= 100 and value % 1 == 0
 		end
 		return type(value) == "boolean"
 	end
