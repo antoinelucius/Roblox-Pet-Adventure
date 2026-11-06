@@ -168,7 +168,7 @@ incomeLabel.Parent = topBar
 -- Rebirth label
 local rebirthLabel = Instance.new("TextLabel")
 rebirthLabel.Size = UDim2.new(0, 130, 0, 25)
-rebirthLabel.Position = UDim2.new(0, 280, 0, 20)
+rebirthLabel.Position = UDim2.new(0, 321, 0, 20)
 rebirthLabel.BackgroundColor3 = Color3.fromRGB(80, 40, 120)
 rebirthLabel.BackgroundTransparency = 0.2
 rebirthLabel.Text = "Renaissance: 0"
@@ -1504,6 +1504,7 @@ RunService:BindToRenderStep("MWS_CamShake", Enum.RenderPriority.Camera.Value + 2
     end
 end)
 local function shakeCamera(amp, duration, delay)
+    if game:GetService("Players").LocalPlayer:GetAttribute("MWS_SetShake") == false then return end
     task.delay(delay or 0, function()
         shakeAmp, shakeLen = amp, math.max(duration, 0.05)
         shakeUntil = os.clock() + shakeLen

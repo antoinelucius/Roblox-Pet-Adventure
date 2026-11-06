@@ -56,12 +56,20 @@ end
 local battleMusic = makeTrack("battleMusic", BATTLE_MUSIC_ID)
 local bossMusic = makeTrack("bossMusic", BOSS_MUSIC_ID)
 
-local muted = false
+-- volumes choisis dans les parametres (MWS_Settings) : attributs du joueur, de 0 a 100
+local function level(attribute)
+	return (player:GetAttribute(attribute) or 100) / 100
+end
+local sfxGroup = Instance.new("SoundGroup")
+sfxGroup.Name = "MWS_Sfx"
+sfxGroup.Parent = SoundService
+for _, sound in pairs(bank) do sound.SoundGroup = sfxGroup end
+
 local currentTrack = music
 local fades = {}
 local function trackVolume(track)
-	if muted or track ~= currentTrack then return 0 end
-	return track == music and MUSIC_VOLUME or BATTLE_VOLUME
+	if track ~= currentTrack then return 0 end
+	return (track == music and MUSIC_VOLUME or BATTLE_VOLUME) * level("MWS_SetMusic")
 end
 -- passe d'une musique a l'autre en fondu
 local function setMusic(track)
@@ -78,56 +86,42 @@ local function setMusic(track)
 end
 
 local function play(name, delaySeconds)
-	if muted then return end
 	if delaySeconds and delaySeconds > 0 then
 		task.delay(delaySeconds, function()
-			if not muted then bank[name]:Play() end
+			bank[name]:Play()
 		end)
 	else
 		bank[name]:Play()
 	end
 end
 
--- bouton pour couper le son
 local screen = Instance.new("ScreenGui")
 screen.Name = "MWS_SoundUI"
 screen.ResetOnSpawn = false
 screen.IgnoreGuiInset = true
 screen.DisplayOrder = 5
 screen.Parent = player:WaitForChild("PlayerGui")
-local toggle = Instance.new("TextButton")
-toggle.Name = "SoundToggle"
--- a cote de Renaissance, dans le menu de gauche : visible aussi sur telephone
-toggle.AnchorPoint = Vector2.new(0, 0)
-toggle.Position = UDim2.new(0, 141, 0, 276)
-toggle.Size = UDim2.new(0, 120, 0, 36)
-toggle.BackgroundColor3 = Color3.fromRGB(40, 40, 58)
-toggle.Text = "\u{1F50A} Son"
-toggle.TextSize = 14
-toggle.Font = Enum.Font.GothamBold
-toggle.TextColor3 = Color3.fromRGB(255, 255, 255)
-local corner = Instance.new("UICorner")
-corner.CornerRadius = UDim.new(0, 8)
-corner.Parent = toggle
-toggle.Parent = screen
-toggle.Activated:Connect(function()
-	muted = not muted
-	toggle.Text = muted and "\u{1F507} Muet" or "\u{1F50A} Son"
+
+local function applyMusic()
 	for _, item in ipairs({ music, battleMusic, bossMusic }) do
 		if fades[item] then fades[item]:Cancel() end
 		item.Volume = trackVolume(item)
 	end
-	if muted then
-		for _, sound in pairs(bank) do sound:Stop() end
-	end
+end
+local function applySfx()
+	sfxGroup.Volume = level("MWS_SetSfx")
 	-- sons joues dans le monde (sacs de frappe)
 	local worldGroup = SoundService:FindFirstChild("MWS_WorldSounds")
-	if worldGroup then worldGroup.Volume = muted and 0 or 1 end
-end)
+	if worldGroup then worldGroup.Volume = level("MWS_SetSfx") end
+end
+player:GetAttributeChangedSignal("MWS_SetMusic"):Connect(applyMusic)
+player:GetAttributeChangedSignal("MWS_SetSfx"):Connect(applySfx)
+applyMusic()
+applySfx()
 
--- le groupe des sacs de frappe peut arriver apres un clic sur Muet
+-- le groupe des sacs de frappe peut arriver apres le reglage du volume
 SoundService.ChildAdded:Connect(function(child)
-	if child.Name == "MWS_WorldSounds" and child:IsA("SoundGroup") then child.Volume = muted and 0 or 1 end
+	if child.Name == "MWS_WorldSounds" and child:IsA("SoundGroup") then child.Volume = level("MWS_SetSfx") end
 end)
 
 -- clic sur tous les boutons de l'interface

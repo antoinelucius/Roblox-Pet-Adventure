@@ -50,10 +50,6 @@ end
 -- sans son texte, l'icone de patte se perd sur le fond sombre
 if buttons[1] then buttons[1].BackgroundColor3 = Color3.fromRGB(120, 100, 190) end
 
-local soundUi = playerGui:WaitForChild("MWS_SoundUI", 10)
-local soundButton = soundUi and soundUi:WaitForChild("SoundToggle", 10)
-if soundButton then place(soundButton, #MENU + 1) end
-
 -- argent et renaissance : en haut au centre, plus petits
 for _, child in ipairs(gui:GetChildren()) do
 	if child:IsA("Frame") and child.Visible then
@@ -83,7 +79,7 @@ for _, child in ipairs(gui:GetChildren()) do
 		end
 	elseif child:IsA("TextLabel") and child.Text:find("Renaissance", 1, true) then
 		child.AnchorPoint = Vector2.new(0.5, 0)
-		child.Position = UDim2.new(0.5, 90, 0, 15)
+		child.Position = UDim2.new(0.5, 130, 0, 15)
 		child.Size = UDim2.fromOffset(100, 22)
 		child.TextSize = 11
 	end

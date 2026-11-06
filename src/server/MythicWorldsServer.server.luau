@@ -1629,6 +1629,7 @@ function Saves.snapshot(s)
 		tut = s.tut, tutProg = s.tutProg, dex = Saves.deepCopy(s.dex), dexClaimed = Saves.deepCopy(s.dexClaimed),
 		daily = Saves.deepCopy(s.daily), quests = Saves.deepCopy(s.quests),
 		auraColor = s.auraColor, trail = s.trail, potions = Saves.deepCopy(s.potions or {}),
+		settings = Saves.deepCopy(s.settings or {}),
 		lastSeen = os.time(),
 	}
 end
@@ -5279,6 +5280,49 @@ end
 
 Players.PlayerAdded:Connect(onPlayerAdded)
 for _, p in ipairs(Players:GetPlayers()) do onPlayerAdded(p) end
+
+-- Parametres du joueur (son, noms, secousses) : gardes dans la sauvegarde et rendus au
+-- client par des attributs quand la partie est chargee
+do
+	local SETTINGS = {
+		music = { attribute = "MWS_SetMusic", volume = true },
+		sfx = { attribute = "MWS_SetSfx", volume = true },
+		names = { attribute = "MWS_SetNames" },
+		shake = { attribute = "MWS_SetShake" },
+	}
+	local function isValid(rule, value)
+		if rule.volume then
+			return type(value) == "number" and value >= 0 and value <= 100 and value % 25 == 0
+		end
+		return type(value) == "boolean"
+	end
+
+	getRemote("SaveSetting").OnServerEvent:Connect(function(player, key, value)
+		local rule = type(key) == "string" and SETTINGS[key]
+		local s = states[player.UserId]
+		if not rule or not s or not isValid(rule, value) then return end
+		if type(s.settings) ~= "table" then s.settings = {} end
+		s.settings[key] = value
+	end)
+
+	local function onSettingsPlayer(player)
+		task.spawn(function()
+			local waited = 0
+			while not states[player.UserId] and player.Parent and waited < 30 do
+				task.wait(0.25)
+				waited = waited + 0.25
+			end
+			local s = states[player.UserId]
+			if not s or not player.Parent or type(s.settings) ~= "table" then return end
+			for key, rule in pairs(SETTINGS) do
+				local value = s.settings[key]
+				if value ~= nil and isValid(rule, value) then player:SetAttribute(rule.attribute, value) end
+			end
+		end)
+	end
+	Players.PlayerAdded:Connect(onSettingsPlayer)
+	for _, p in ipairs(Players:GetPlayers()) do onSettingsPlayer(p) end
+end
 
 Players.PlayerRemoving:Connect(function(player)
 	clearPlayerVisuals(player)
