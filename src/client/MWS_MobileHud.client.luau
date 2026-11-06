@@ -1,5 +1,6 @@
 -- MWS_MobileHud : sur petit ecran, le menu devient une grille d'icones collee a gauche,
 -- et l'argent passe en haut au centre pour ne plus etre sous les boutons de Roblox.
+-- Cette disposition suppose un ecran couche : StarterGui.ScreenOrientation = LandscapeSensor.
 local Players = game:GetService("Players")
 
 local SMALL_SCREEN = 500   -- plus petit cote de l'ecran en dessous duquel on compacte
