@@ -2006,8 +2006,9 @@ local function spawnPetVisual(player, petData, slot)
 	local lbl = Instance.new("TextLabel")
 	lbl.Size = UDim2.new(1, 0, 1, 0)
 	lbl.BackgroundTransparency = 1
-	lbl.Text = Traits.fullName(petData) .. ((petData.lvl or 0) > 0 and (" Nv." .. petData.lvl) or "")
-	lbl.TextColor3 = Traits.accent(petData) or rar.color
+	-- nom court au-dessus du pet : couleur de la fusion, sinon de la rarete
+	lbl.Text = petData.name
+	lbl.TextColor3 = Traits.fusionColor(petData) or rar.color
 	lbl.Font = Enum.Font.GothamBold
 	lbl.TextSize = 13
 	lbl.TextStrokeTransparency = 0.4

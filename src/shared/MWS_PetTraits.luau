@@ -49,6 +49,18 @@ function T.fullName(pet)
 	return (s and (s.label .. " ") or "") .. pet.name .. string.rep("+", pet.tier or 0) .. (m and (" " .. m.label) or "")
 end
 
+-- couleur du nom d'un pet fusionne, une par niveau de fusion (nil si pas fusionne)
+T.FUSION_COLORS = {
+	Color3.fromRGB(110, 255, 120),   -- fusion 1 : vert
+	Color3.fromRGB(90, 200, 255),    -- fusion 2 : bleu
+	Color3.fromRGB(255, 170, 40),    -- fusion 3 : orange
+}
+function T.fusionColor(pet)
+	local tier = pet and pet.tier or 0
+	if tier <= 0 then return nil end
+	return T.FUSION_COLORS[math.min(tier, #T.FUSION_COLORS)]
+end
+
 -- "Titan · Doré" (vide si normal)
 function T.tag(pet)
 	local s = T.SIZE[pet.size or ""]

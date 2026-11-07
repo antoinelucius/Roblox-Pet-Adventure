@@ -309,7 +309,7 @@ eggPanel.Parent = gui
 local eggPanelTitle = Instance.new("TextLabel")
 eggPanelTitle.Size = UDim2.new(1, 0, 0, 40)
 eggPanelTitle.BackgroundTransparency = 1
-eggPanelTitle.Text = "\xF0\x9F\xA5\x9A Oeufs disponibles"
+eggPanelTitle.Text = "\xF0\x9F\xA5\x9A Oeufs"
 eggPanelTitle.TextColor3 = Color3.fromRGB(255, 255, 255)
 eggPanelTitle.Font = Enum.Font.GothamBold
 eggPanelTitle.TextSize = 22
@@ -353,7 +353,7 @@ combatPanel.Parent = gui
 local combatTitle = Instance.new("TextLabel")
 combatTitle.Size = UDim2.new(1, 0, 0, 40)
 combatTitle.BackgroundTransparency = 1
-combatTitle.Text = "\xE2\x9A\x94 Dresseurs a battre"
+combatTitle.Text = "\xE2\x9A\x94 Combats"
 combatTitle.TextColor3 = Color3.fromRGB(255, 255, 255)
 combatTitle.Font = Enum.Font.GothamBold
 combatTitle.TextSize = 22
@@ -843,57 +843,65 @@ local function refreshPanel()
         local card = Instance.new("Frame")
         card.LayoutOrder = cardIndex
         card.Name = "PetCard" .. tostring(pet.id)
-        card.BackgroundColor3 = RARITY_COLORS[pet.rarity] or Color3.fromRGB(100, 100, 100)
+        -- carte sombre : la rarete est le contour de l'image, la fusion la couleur du nom
+        local rarityColor = RARITY_COLORS[pet.rarity] or Color3.fromRGB(100, 100, 100)
+        card.BackgroundColor3 = Color3.fromRGB(38, 38, 54)
         makeCorner(card, 8)
-
-        local petIcon = Instance.new("Frame")
-        petIcon.Size = UDim2.new(1, -10, 0, 55)
-        petIcon.Position = UDim2.new(0, 5, 0, 5)
-        petIcon.BackgroundColor3 = colorFromData(pet.color)
-        makeCorner(petIcon, 6)
-        petIcon.Parent = card
-        setPetViewport(newPetViewport(petIcon), pet.name, pet.rarity, pet.mutation)
-        if (pet.tier or 0) == 0 and Traits.accent(pet) then
-            -- taille ou mutation : contour de la couleur de la mutation
+        if Traits.accent(pet) then
+            -- taille ou mutation : fin contour de la carte, de la couleur de la mutation
             local ms = Instance.new("UIStroke")
             ms.Color = Traits.accent(pet)
             ms.Thickness = 2
             ms.Parent = card
         end
-        if (pet.tier or 0) > 0 then
-            -- pet fusionne : contour violet, plus epais a chaque fusion
-            local fs = Instance.new("UIStroke")
-            fs.Color = Color3.fromRGB(170, 80, 255)
-            fs.Thickness = 1 + pet.tier
-            fs.Parent = card
-        end
 
+        local petIcon = Instance.new("Frame")
+        petIcon.Size = UDim2.new(1, -12, 0, 53)
+        petIcon.Position = UDim2.new(0, 6, 0, 6)
+        petIcon.BackgroundColor3 = colorFromData(pet.color)
+        makeCorner(petIcon, 6)
+        petIcon.Parent = card
+        local rarityStroke = Instance.new("UIStroke")
+        rarityStroke.Color = rarityColor
+        rarityStroke.Thickness = 3
+        rarityStroke.Parent = petIcon
+        setPetViewport(newPetViewport(petIcon), pet.name, pet.rarity, pet.mutation)
+
+        -- nom court : seulement le nom du pet ; une couleur par niveau de fusion
         local petName = Instance.new("TextLabel")
-        petName.Size = UDim2.new(1, 0, 0, 20)
-        petName.Position = UDim2.new(0, 0, 0, 62)
+        petName.Size = UDim2.new(1, -8, 0, 20)
+        petName.Position = UDim2.new(0, 4, 0, 62)
         petName.BackgroundTransparency = 1
-        petName.Text = Traits.fullName(pet)
-        petName.TextScaled = #petName.Text > 16
-        petName.TextColor3 = Color3.fromRGB(255, 255, 255)
+        petName.Text = pet.name
+        petName.TextScaled = true
+        petName.TextColor3 = Traits.fusionColor(pet) or Color3.fromRGB(255, 255, 255)
         petName.Font = Enum.Font.GothamBold
-        petName.TextSize = 13
+        petName.TextSize = 14
         petName.Parent = card
+        local nameLimit = Instance.new("UITextSizeConstraint")
+        nameLimit.MaxTextSize = 14
+        nameLimit.Parent = petName
 
+        -- taille ou mutation si le pet en a, sinon le nom de la rarete
         local petInfo = Instance.new("TextLabel")
-        petInfo.Size = UDim2.new(1, 0, 0, 14)
-        petInfo.Position = UDim2.new(0, 0, 0, 80)
+        petInfo.Size = UDim2.new(1, -8, 0, 14)
+        petInfo.Position = UDim2.new(0, 4, 0, 80)
         petInfo.BackgroundTransparency = 1
-        petInfo.Text = pet.rarity .. ((pet.tier or 0) > 0 and (" | Fusion " .. pet.tier) or "") .. (Traits.tag(pet) ~= "" and (" | " .. Traits.tag(pet)) or "")
-        petInfo.TextColor3 = Color3.fromRGB(200, 200, 200)
+        petInfo.Text = Traits.tag(pet) ~= "" and Traits.tag(pet) or pet.rarity
+        petInfo.TextColor3 = Traits.accent(pet) or rarityColor
+        petInfo.TextScaled = true
         petInfo.Font = Enum.Font.Gotham
         petInfo.TextSize = 11
         petInfo.Parent = card
+        local infoLimit = Instance.new("UITextSizeConstraint")
+        infoLimit.MaxTextSize = 11
+        infoLimit.Parent = petInfo
 
         local incomeText = Instance.new("TextLabel")
         incomeText.Size = UDim2.new(1, 0, 0, 16)
         incomeText.Position = UDim2.new(0, 0, 0, 94)
         incomeText.BackgroundTransparency = 1
-        incomeText.Text = ((pet.lvl or 0) > 0 and ("Niv " .. pet.lvl .. " | ") or "") .. "+" .. tostring(math.floor((pet.income or 0) * (1 + 0.1 * (pet.lvl or 0)))) .. "/s"
+        incomeText.Text = ((pet.lvl or 0) > 0 and ("Nv" .. pet.lvl .. "  ") or "") .. "+" .. tostring(math.floor((pet.income or 0) * (1 + 0.1 * (pet.lvl or 0)))) .. "/s"
         incomeText.TextColor3 = Color3.fromRGB(100, 255, 100)
         incomeText.Font = Enum.Font.GothamBold
         incomeText.TextSize = 12
@@ -1144,9 +1152,9 @@ local function refreshTraitPanel()
     if not currentTrait then return end
     local def, kind = currentTrait.def, currentTrait.kind
     local accent = def.color or Color3.fromRGB(255, 235, 150)
-    traitTitle.Text = def.label .. " - tous les pets"
+    traitTitle.Text = def.label
     traitTitle.TextColor3 = Color3.new(1, 1, 1):Lerp(accent, 0.5)
-    traitSub.Text = "Chance a chaque eclosion : " .. def.chance .. "%   |   Gains et force x" .. def.mult .. (kind == "size" and ("   |   Taille x" .. def.scale) or "")
+    traitSub.Text = def.chance .. "% de chance  ·  gains x" .. def.mult .. (kind == "size" and ("  ·  taille x" .. def.scale) or "")
     -- pets uniques de tous les oeufs, dans l'ordre des oeufs
     local seen, order = {}, 0
     for _, egg in ipairs(eggData or {}) do
@@ -1443,7 +1451,7 @@ local function refreshCombatPanel()
         infoLbl.Size = UDim2.new(0, 250, 0, 20)
         infoLbl.Position = UDim2.new(0, 55, 0, 30)
         infoLbl.BackgroundTransparency = 1
-        infoLbl.Text = npc.petCount .. " pets | Recompense: " .. npc.reward .. " coins"
+        infoLbl.Text = npc.petCount .. " pets  ·  " .. npc.reward .. " coins"
         infoLbl.TextColor3 = Color3.fromRGB(200, 200, 200)
         infoLbl.Font = Enum.Font.Gotham
         infoLbl.TextSize = 13
@@ -1832,7 +1840,7 @@ RebirthRemote.OnClientEvent:Connect(function(data)
     if data.success then
         hatchFrame.Visible = true
         hatchFrame.BackgroundTransparency = 0.3
-        hatchLabel.Text = "RENAISSANCE !\nNiveau: " .. data.rebirthLevel .. "\nMultiplier x" .. (1 + data.rebirthLevel * 0.5)
+        hatchLabel.Text = "RENAISSANCE !\nNiveau " .. data.rebirthLevel .. "  ·  gains x" .. (1 + data.rebirthLevel * 0.5)
         hatchLabel.TextColor3 = Color3.fromRGB(200, 100, 255)
         hatchLabel.TextSize = 28
         task.wait(3)
@@ -2682,7 +2690,7 @@ do
         for _, c in ipairs(auraScroll:GetChildren()) do
             if c:IsA("GuiObject") then c:Destroy() end
         end
-        auraStatus.Text = "Pour tes pets fusionnes. Auto = la couleur du pet."
+        auraStatus.Text = "Pour tes pets fusionnés"
         local cur = state.auraColor or "auto"
         for i, c in ipairs(AURA_CHOICES) do
             local b = Instance.new("TextButton")
@@ -3021,7 +3029,7 @@ do
         for _, c in ipairs(fusionScroll:GetChildren()) do
             if c:IsA("Frame") then c:Destroy() end
         end
-        fusionStatus.Text = "3 pets identiques (meme niveau) = 1 oeuf plus fort : revenu x4 par fusion (3 niveaux max)"
+        fusionStatus.Text = "3 pets pareils = 1 pet x4  (3 fusions max)"
         for i, g in ipairs(fusionList) do
             local row = Instance.new("Frame")
             row.LayoutOrder = i
@@ -3089,7 +3097,7 @@ do
             end)
         end
         if #fusionList == 0 then
-            fusionStatus.Text = "Tu n'as encore aucun pet. Achete des oeufs !"
+            fusionStatus.Text = "Aucun pet : achète des oeufs !"
         end
     end
 
@@ -3212,7 +3220,7 @@ do
         return new("UIListLayout", { Padding = UDim.new(0, pad), SortOrder = Enum.SortOrder.LayoutOrder }, parent)
     end
 
-    local questPanel, questScroll, questStatus = makePanel("Quetes et recompense du jour", 520, 540)
+    local questPanel, questScroll, questStatus = makePanel("Quêtes", 520, 540)
     listLayout(questScroll, 10)
     local boardPanel, boardScroll, boardStatus = makePanel("Classement du serveur", 480, 460)
     listLayout(boardScroll, 8)
@@ -3225,14 +3233,14 @@ do
         clearFrames(questScroll)
         dailyBtn = nil
         if not meta.daily then questStatus.Text = "Chargement..." return end
-        questStatus.Text = "Les quetes changent chaque jour"
+        questStatus.Text = "Nouvelles quêtes chaque jour"
         local d = meta.daily
 
         local card = new("Frame", { LayoutOrder = 1, Size = UDim2.new(1, -8, 0, 160), BackgroundColor3 = Color3.fromRGB(40, 40, 58), ZIndex = 6 }, questScroll)
         makeCorner(card, 12)
         new("TextLabel", {
             Size = UDim2.new(1, -20, 0, 26), Position = UDim2.new(0, 10, 0, 6), BackgroundTransparency = 1,
-            Text = "Recompense quotidienne  -  serie : jour " .. d.streak, TextColor3 = GOLDC, Font = Enum.Font.GothamBold,
+            Text = "Cadeau du jour  ·  jour " .. d.streak, TextColor3 = GOLDC, Font = Enum.Font.GothamBold,
             TextSize = 16, TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 7,
         }, card)
         local row = new("Frame", { Size = UDim2.new(1, -20, 0, 62), Position = UDim2.new(0, 10, 0, 38), BackgroundTransparency = 1, ZIndex = 7 }, card)
@@ -3253,10 +3261,10 @@ do
         makeCorner(dailyBtn, 8)
         if d.claimed then
             dailyBtn.BackgroundColor3 = Color3.fromRGB(80, 80, 95)
-            dailyBtn.Text = "Reclamee - prochaine dans " .. fmtClock((meta.secondsLeft or 0) - (os.clock() - metaAt))
+            dailyBtn.Text = "Prochain cadeau dans " .. fmtClock((meta.secondsLeft or 0) - (os.clock() - metaAt))
         else
             dailyBtn.BackgroundColor3 = Color3.fromRGB(0, 150, 90)
-            dailyBtn.Text = "Reclamer la recompense du jour"
+            dailyBtn.Text = "Récupérer"
             dailyBtn.MouseButton1Click:Connect(function() MetaAction:FireServer("daily") end)
         end
 
@@ -3274,7 +3282,7 @@ do
             makeCorner(fill, 5)
             new("TextLabel", {
                 Size = UDim2.new(1, -150, 0, 18), Position = UDim2.new(0, 10, 0, 54), BackgroundTransparency = 1,
-                Text = "Recompense : +" .. fmtNum(q.reward) .. " coins", TextColor3 = GOLDC, Font = Enum.Font.Gotham,
+                Text = "+" .. fmtNum(q.reward) .. " coins", TextColor3 = GOLDC, Font = Enum.Font.Gotham,
                 TextSize = 12, TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 7,
             }, r)
             local b = new("TextButton", {
@@ -3300,7 +3308,7 @@ do
     local function refreshBoard()
         clearFrames(boardScroll)
         if not boardData then boardStatus.Text = "Chargement..." return end
-        boardStatus.Text = "Les joueurs de ce serveur, par revenu/s"
+        boardStatus.Text = "Classé par revenu/s"
         for i, p in ipairs(boardData) do
             local r = new("Frame", { LayoutOrder = i, Size = UDim2.new(1, -8, 0, 52), BackgroundColor3 = (i == 1) and Color3.fromRGB(70, 60, 30) or Color3.fromRGB(40, 40, 58), ZIndex = 6 }, boardScroll)
             makeCorner(r, 10)
@@ -3379,7 +3387,7 @@ do
             local hrp = char and char:FindFirstChild("HumanoidRootPart")
             marker.Parent = nil -- remplace par le guide en pointilles (plus bas)
             if dailyBtn and questPanel.Visible and meta.daily and meta.daily.claimed then
-                dailyBtn.Text = "Reclamee - prochaine dans " .. fmtClock((meta.secondsLeft or 0) - (os.clock() - metaAt))
+                dailyBtn.Text = "Prochain cadeau dans " .. fmtClock((meta.secondsLeft or 0) - (os.clock() - metaAt))
             end
         end
     end)
