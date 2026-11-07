@@ -50,7 +50,9 @@ local function title(props, parent)
 	props.Font = FONT
 	props.TextColor3 = WHITE
 	props.TextXAlignment = props.TextXAlignment or Enum.TextXAlignment.Left
+	props.TextScaled = true   -- reste dans sa case, meme si le telephone grossit les textes
 	local label = new("TextLabel", props, parent)
+	new("UITextSizeConstraint", { MaxTextSize = props.TextSize }, label)
 	new("UIStroke", { Color = INK, Thickness = props.TextSize >= 24 and 3 or 2 }, label)
 	return label
 end

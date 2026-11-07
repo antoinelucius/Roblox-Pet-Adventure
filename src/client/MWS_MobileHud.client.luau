@@ -76,13 +76,19 @@ for _, child in ipairs(gui:GetChildren()) do
 			limit.Parent = coin
 			income.Position = UDim2.fromOffset(34, 22)
 			income.Size = UDim2.new(1, -38, 0, 15)
-			income.TextSize = 11
+			income.TextScaled = true   -- reste dans sa case meme si le telephone grossit les textes
+			local incomeLimit = Instance.new("UITextSizeConstraint")
+			incomeLimit.MaxTextSize = 11
+			incomeLimit.Parent = income
 		end
 	elseif child:IsA("TextLabel") and child.Text:find("Renaissance", 1, true) then
 		child.AnchorPoint = Vector2.new(0.5, 0)
 		child.Position = UDim2.new(0.5, 130, 0, 15)
 		child.Size = UDim2.fromOffset(100, 22)
-		child.TextSize = 11
+		child.TextScaled = true
+		local rebirthLimit = Instance.new("UITextSizeConstraint")
+		rebirthLimit.MaxTextSize = 11
+		rebirthLimit.Parent = child
 	end
 end
 
@@ -118,3 +124,80 @@ if generated then
 		if isBossLabel(item) then shrinkBossLabel(item) end
 	end)
 end
+
+-- panneaux : chaque panneau ouvert est reduit pour tenir a cote du menu, sans passer sous
+-- les boutons de Roblox. On garde la zone ou il peut etre le plus grand.
+local MARGIN = 8
+local GRID_RIGHT = LEFT + 2 * (BUTTON + GAP) + MARGIN
+local ROBLOX_RIGHT = 168   -- fin des boutons de Roblox, en haut a gauche
+local TABS_WIDTH, TABS_GAP = 120, 10
+local ZONES = { { left = GRID_RIGHT, top = TOP }, { left = ROBLOX_RIGHT, top = MARGIN } }
+
+-- taille du panneau avant reduction
+local function naturalSize(frame, area)
+	local size = frame.Size
+	local width = size.X.Scale * area.X + size.X.Offset
+	local height = size.Y.Scale * area.Y + size.Y.Offset
+	local limit = frame:FindFirstChildOfClass("UISizeConstraint")
+	if limit then
+		width = math.clamp(width, limit.MinSize.X, limit.MaxSize.X)
+		height = math.clamp(height, limit.MinSize.Y, limit.MaxSize.Y)
+	end
+	return width, height
+end
+
+local function fitScale(frame)
+	local fitter = frame:FindFirstChild("MWS_Fit")
+	if not fitter then
+		fitter = Instance.new("UIScale")
+		fitter.Name = "MWS_Fit"
+		fitter.Parent = frame
+	end
+	return fitter
+end
+
+local function fit(frame)
+	local area = frame.Parent.AbsoluteSize
+	local width, height = naturalSize(frame, area)
+	local paired = frame.Name == "MWS_EggPanel" or frame.Name == "MWS_TraitPanel"
+	local tabs = paired and gui:FindFirstChild("MWS_SideTabs")
+	local groupWidth = width + (tabs and TABS_WIDTH + TABS_GAP or 0)
+	local best, zoneWidth, zoneHeight, zone
+	for _, candidate in ipairs(ZONES) do
+		local w, h = area.X - MARGIN - candidate.left, area.Y - MARGIN - candidate.top
+		local k = math.min(1, w / groupWidth, h / height)
+		if not best or k > best then best, zoneWidth, zoneHeight, zone = k, w, h, candidate end
+	end
+	fitScale(frame).Scale = best
+	local groupLeft = zone.left + (zoneWidth - groupWidth * best) / 2
+	local centerY = zone.top + zoneHeight / 2
+	frame.AnchorPoint = Vector2.new(0.5, 0.5)
+	frame.Position = UDim2.fromOffset(groupLeft + (groupWidth - width / 2) * best, centerY)
+	if tabs then
+		fitScale(tabs).Scale = best
+		tabs.AnchorPoint = Vector2.new(0.5, 0.5)
+		tabs.Position = UDim2.fromOffset(groupLeft + TABS_WIDTH * best / 2, centerY)
+	end
+end
+
+local watched = {}
+local function watch(frame)
+	if watched[frame] or not frame:IsA("Frame") or frame.Name == "MWS_SideTabs" then return end
+	local size = frame.Size
+	if size.X.Scale >= 1 and size.Y.Scale >= 1 then return end   -- plein ecran (combat, oeuf)
+	local width, height = naturalSize(frame, frame.Parent.AbsoluteSize)
+	if width < 200 or height < 200 then return end               -- argent, petites bulles
+	watched[frame] = true
+	local function update()
+		if frame.Visible then fit(frame) end
+	end
+	frame:GetPropertyChangedSignal("Visible"):Connect(update)
+	frame:GetPropertyChangedSignal("Size"):Connect(update)
+	update()
+end
+
+for _, child in ipairs(gui:GetChildren()) do watch(child) end
+gui.ChildAdded:Connect(watch)
+local settingsGui = playerGui:WaitForChild("MWS_Settings", 10)
+local settingsPanel = settingsGui and settingsGui:FindFirstChildOfClass("Frame")
+if settingsPanel then watch(settingsPanel) end

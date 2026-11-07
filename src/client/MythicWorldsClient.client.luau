@@ -1118,6 +1118,10 @@ traitTabs.Position = UDim2.new(0.5, -430, 0.5, -240)
 traitTabs.BackgroundTransparency = 1
 traitTabs.Visible = false
 traitTabs.Parent = gui
+-- noms lus par MWS_MobileHud : les panneaux d'oeufs et leur colonne d'onglets vont ensemble
+eggPanel.Name = "MWS_EggPanel"
+traitPanel.Name = "MWS_TraitPanel"
+traitTabs.Name = "MWS_SideTabs"
 local tabList = Instance.new("UIListLayout")
 tabList.Padding = UDim.new(0, 6)
 tabList.SortOrder = Enum.SortOrder.LayoutOrder
@@ -2735,20 +2739,43 @@ do
     local function refreshShop()
         local keepY = shopScroll.CanvasPosition.Y
         -- petit ecran : menu plus etroit et cartes en une colonne, pour garder les textes lisibles
-        local panelWidth = shopScroll.Parent.AbsoluteSize.X
+        -- taille avant la reduction de MWS_MobileHud (UIScale "MWS_Fit") sur telephone
+        local fitScale = shopScroll.Parent:FindFirstChild("MWS_Fit")
+        local shrink = fitScale and fitScale.Scale or 1
+        local panelWidth = shopScroll.Parent.AbsoluteSize.X / shrink
+        local panelHeight = shopScroll.Parent.AbsoluteSize.Y / shrink
         local narrow = panelWidth < 520
         local nav = shopScroll.Parent:FindFirstChild("ShopNav")
         local navWidth = narrow and 70 or 98
         nav.Size = UDim2.new(0, navWidth, 1, -80)
         nav.Position = UDim2.new(1, -navWidth - 8, 0, 72)
         shopScroll.Size = UDim2.new(1, -navWidth - 26, 1, -80)
+        -- les onglets se partagent la hauteur disponible, sans depasser du panneau
+        local tabCount = #shopUI.sections
+        local tabHeight = math.min(narrow and 62 or 72, math.floor((panelHeight - 80 - 8 * (tabCount - 1)) / tabCount))
         for _, navButton in ipairs(nav:GetChildren()) do
             if navButton:IsA("TextButton") then
-                navButton.Size = UDim2.new(1, 0, 0, narrow and 62 or 72)
+                navButton.Size = UDim2.new(1, 0, 0, tabHeight)
                 for _, navLabel in ipairs(navButton:GetChildren()) do
-                    if navLabel:IsA("TextLabel") and navLabel.TextSize < 20 then navLabel.TextSize = narrow and 10 or 12 end
-                    if navLabel:IsA("TextLabel") and navLabel.TextSize >= 20 then navLabel.Position = UDim2.new(0, 0, 0, narrow and 2 or 6) end
-                    if navLabel:IsA("TextLabel") and navLabel.TextSize < 20 then navLabel.Position = UDim2.new(0, 0, 0, narrow and 40 or 46) end
+                    if navLabel:IsA("TextLabel") then
+                        -- icone en haut, titre en bas ; les tailles suivent la hauteur de l'onglet
+                        local limit = navLabel:FindFirstChildOfClass("UITextSizeConstraint")
+                        if not limit then
+                            navLabel:SetAttribute("IsIcon", navLabel.TextSize >= 20)
+                            limit = Instance.new("UITextSizeConstraint")
+                            limit.MaxTextSize = navLabel.TextSize
+                            limit.Parent = navLabel
+                            navLabel.TextScaled = true
+                        end
+                        if navLabel:GetAttribute("IsIcon") then
+                            navLabel.Position = UDim2.new(0, 0, 0.06, 0)
+                            navLabel.Size = UDim2.new(1, 0, 0.52, 0)
+                        else
+                            limit.MaxTextSize = narrow and 10 or 12
+                            navLabel.Position = UDim2.new(0, 0, 0.62, 0)
+                            navLabel.Size = UDim2.new(1, 0, 0.28, 0)
+                        end
+                    end
                 end
             end
         end
