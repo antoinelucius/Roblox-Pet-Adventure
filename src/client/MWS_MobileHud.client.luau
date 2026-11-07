@@ -180,17 +180,23 @@ local function fit(frame)
 	end
 end
 
+-- un panneau a reduire : ni plein ecran (combat, oeuf), ni petite bulle (argent). La taille est
+-- verifiee a chaque fois : le panneau Parametres ne recoit la sienne qu'a sa premiere ouverture.
+local function isPanel(frame)
+	local size = frame.Size
+	if size.X.Scale >= 1 and size.Y.Scale >= 1 then return false end
+	local width, height = naturalSize(frame, frame.Parent.AbsoluteSize)
+	return width >= 200 and height >= 200
+end
+local function refit(frame)
+	if frame.Parent and frame.Visible and isPanel(frame) then fit(frame) end
+end
+
 local watched = {}
 local function watch(frame)
 	if watched[frame] or not frame:IsA("Frame") or frame.Name == "MWS_SideTabs" then return end
-	local size = frame.Size
-	if size.X.Scale >= 1 and size.Y.Scale >= 1 then return end   -- plein ecran (combat, oeuf)
-	local width, height = naturalSize(frame, frame.Parent.AbsoluteSize)
-	if width < 200 or height < 200 then return end               -- argent, petites bulles
 	watched[frame] = true
-	local function update()
-		if frame.Visible then fit(frame) end
-	end
+	local function update() refit(frame) end
 	frame:GetPropertyChangedSignal("Visible"):Connect(update)
 	frame:GetPropertyChangedSignal("Size"):Connect(update)
 	update()
@@ -198,6 +204,10 @@ end
 
 for _, child in ipairs(gui:GetChildren()) do watch(child) end
 gui.ChildAdded:Connect(watch)
+-- l'ecran change de taille : les menus ouverts sont replaces
+gui:GetPropertyChangedSignal("AbsoluteSize"):Connect(function()
+	for frame in pairs(watched) do refit(frame) end
+end)
 local settingsGui = playerGui:WaitForChild("MWS_Settings", 10)
 local settingsPanel = settingsGui and settingsGui:FindFirstChildOfClass("Frame")
 if settingsPanel then watch(settingsPanel) end
