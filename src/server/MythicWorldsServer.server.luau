@@ -246,6 +246,7 @@ local NPC_TRAINERS = {
 		reward = 10000 },
 	-- Monde 2
 	{ name = "Golem de Lave", boss = "GolemDeLave", world = 2, offset = V3(-130, 0, -60), color = {255, 120, 40},
+		trailReward = "trail_magma", bonus = "\u{1F30B} traînée",   -- recompense propre a la premiere victoire
 		pets = {
 			{ name = "Gorille",        hp = 1300, attack = 130, color = {84, 84, 92} },
 			{ name = "Taureau de feu", hp = 1500, attack = 150, color = {120, 40, 30} },
@@ -1535,7 +1536,7 @@ local function sendNPCInfo(player)
 				if idx == i then defeated = true break end
 			end
 		end
-		npcData[i] = { name = npc.name, color = npc.color, reward = npc.reward, petCount = #npc.pets, defeated = defeated, world = npc.world, lines = npc.lines }
+		npcData[i] = { name = npc.name, color = npc.color, reward = npc.reward, petCount = #npc.pets, defeated = defeated, world = npc.world, lines = npc.lines, bonus = npc.bonus }
 	end
 	local needed, done = 0, 0
 	if s then needed, done = rebirthRequirement(s) end
@@ -4127,6 +4128,62 @@ end
 local BossFight = {}
 BossFight.GUARD_FACTOR = 0.3
 
+-- Golem de Lave : son corps chauffe a chaque attaque (les fissures passent de l'orange au blanc),
+-- il leve les bras a 100 %, entre en eruption, puis refroidit 2 tours (croute sombre, vapeur)
+function BossFight.heatVisual(b)
+	local enemy = b.npcPets[b.npcCurrent]
+	local model = b.trainerModel
+	if not enemy or not enemy.isBoss or enemy.heat == nil or not model or not model.Parent then return end
+	if not b.lava then
+		b.lava = {}
+		for _, part in ipairs(model:GetDescendants()) do
+			if part:IsA("BasePart") and part.Material == Enum.Material.Neon then b.lava[part] = part.Color end
+		end
+		local body = model:FindFirstChild("BossBody")
+		if body then
+			local h = body.Size.Y
+			b.lavaFire = emitter(body, Color3.fromRGB(255, 120, 30), 0, h * 0.06, 1.4, h * 0.25)
+			b.lavaFire.EmissionDirection = Enum.NormalId.Top
+			b.lavaSteam = emitter(body, Color3.fromRGB(210, 220, 235), 0, h * 0.1, 2.5, h * 0.12, 0.5)
+			b.lavaSteam.EmissionDirection = Enum.NormalId.Top
+			b.lavaSteam.LightEmission = 0
+			b.lavaBurst = emitter(body, Color3.fromRGB(255, 90, 20), 0, h * 0.05, 1.6, h * 1.2)
+			b.lavaBurst.SpreadAngle = Vector2.new(70, 70)
+			b.lavaBurst.EmissionDirection = Enum.NormalId.Top
+			b.lavaBurst.Acceleration = V3(0, -h * 2.5, 0)
+			b.lavaGlow = body:FindFirstChildOfClass("PointLight")
+		end
+	end
+	local heat = enemy.heat / 100
+	local cooled = (enemy.cooled or 0) > 0
+	-- l'eruption est lancee : le corps reste blanc jusqu'a l'explosion
+	if b.eruptUntil and os.clock() < b.eruptUntil then heat, cooled = 1, false end
+	for part, base in pairs(b.lava) do
+		if part.Parent then
+			part.Material = cooled and Enum.Material.Basalt or Enum.Material.Neon
+			part.Color = cooled and Color3.fromRGB(60, 62, 72) or base:Lerp(Color3.fromRGB(255, 245, 190), heat * 0.8)
+		end
+	end
+	if b.lavaFire then b.lavaFire.Rate = cooled and 0 or (3 + 45 * heat) end
+	if b.lavaSteam then b.lavaSteam.Rate = cooled and 14 or 0 end
+	if b.lavaGlow then
+		b.lavaGlow.Color = cooled and Color3.fromRGB(120, 170, 255) or Color3.fromRGB(255, 120, 40)
+		b.lavaGlow.Brightness = cooled and 0.4 or (0.6 + 3 * heat)
+	end
+	if b.trainerPose then b.trainerPose((heat >= 1 and not cooled) and 0.7 or 0) end
+end
+
+-- recompense propre a un boss : une traînee, donnee a la premiere victoire et equipee tout de suite
+function BossFight.giveTrail(player, s, key)
+	if type(s.bought) ~= "table" or (s.bought[key] or 0) >= 1 then return end
+	s.bought[key] = 1
+	s.trail = key
+	if _G.MWS_ApplyTrail then _G.MWS_ApplyTrail(player) end
+	task.delay(2, function()
+		if player.Parent then notify(player, "Nouvelle récompense : la traînée de magma ! Tu la retrouves dans la boutique.", Color3.fromRGB(255, 150, 60)) end
+	end)
+end
+
 function BossFight.status(b)
 	local enemy = b.npcPets[b.npcCurrent]
 	if not enemy or not b.active then return nil end
@@ -4161,6 +4218,7 @@ local function sendBattleUpdate(player)
 	local b = battles[player.UserId]
 	if not b then return end
 	updateArenaVisuals(b)
+	BossFight.heatVisual(b)
 	local myPet = b.playerPets[b.playerCurrent]
 	BattleUpdate:FireClient(player, {
 		playerPets = b.playerPets, npcPets = b.npcPets,
@@ -4245,6 +4303,7 @@ local function processNPCAttack(player, expected)
 	if erupting then
 		enemyPet.heat = 0
 		enemyPet.cooled = 2
+		b.eruptUntil = os.clock() + impactDelay(4) - 0.05
 		b.log = enemyPet.name .. " entre en ÉRUPTION ! " .. damage .. " degats !"
 	elseif isSuper then
 		enemyPet.charge = 0
@@ -4283,6 +4342,7 @@ local function processNPCAttack(player, expected)
 	task.delay(hit, function()
 		if battles[player.UserId] ~= b or not b.active then return end
 		myPet.hp = math.max(0, myPet.hp - damage)
+		if erupting and b.lavaBurst then b.lavaBurst:Emit(90) end
 		sendBattleUpdate(player)
 	end)
 	task.delay(hit + 0.3, function()
@@ -4321,6 +4381,7 @@ local function winBattle(player, b)
 		s.coins = s.coins + npc.reward
 		b.log = "VICTOIRE ! Tu gagnes " .. npc.reward .. " coins !"
 		if _G.MWS_Track then _G.MWS_Track(player, "battle") end
+		if npc.trailReward then BossFight.giveTrail(player, s, npc.trailReward) end
 	end
 	b.active = false
 	local pv = b.vis.player
@@ -4595,6 +4656,7 @@ startBattle = function(player, npcIndex)
 	tModel.Parent = arena.folder
 	staticAnimators[tModel] = tP.anims
 	b.trainerModel = tModel
+	b.trainerPose = tP.pose
 
 	-- les pets qui suivent le joueur sont caches pendant le combat (ils bouchaient la vue)
 	clearPlayerVisuals(player)
@@ -4851,6 +4913,7 @@ do
 						or (item.limit ~= nil and (s.bought[item.key] or 0) >= item.limit) or false,
 					trail = type(item.reward) == "table" and item.reward.type == "trail",
 					equipped = s.trail == item.key,
+					unlock = item.unlock,
 				})
 			end
 		end

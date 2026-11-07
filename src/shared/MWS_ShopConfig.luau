@@ -87,6 +87,12 @@ Config.Items = {
 		reward = { type = "trail", colors = { {120, 220, 255}, {110, 50, 220} } },
 	},
 	{
+		-- pas de vente : donnee par le serveur a la premiere victoire contre le Golem de Lave
+		key = "trail_magma", section = "trails", kind = "reward", limit = 1, unlock = "Golem",
+		icon = "\u{1F30B}", name = "Trainee de magma", desc = "Recompense : bats le Golem de Lave (monde 2).",
+		reward = { type = "trail", colors = { {255, 150, 40}, {80, 40, 35} } },
+	},
+	{
 		key = "pass_x2", section = "passes", kind = "gamepass", id = 2071248448, price = 499,
 		icon = "\u{1F451}", name = "Gains x2", desc = "Double les revenus de tes pets et les cristaux, a vie",
 		reward = { type = "coinsmult", mult = 2 },

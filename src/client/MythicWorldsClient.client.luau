@@ -1451,7 +1451,7 @@ local function refreshCombatPanel()
         infoLbl.Size = UDim2.new(0, 250, 0, 20)
         infoLbl.Position = UDim2.new(0, 55, 0, 30)
         infoLbl.BackgroundTransparency = 1
-        infoLbl.Text = npc.petCount .. " pets  ·  " .. npc.reward .. " coins"
+        infoLbl.Text = npc.petCount .. " pets  ·  " .. npc.reward .. " coins" .. (npc.bonus and ("  ·  " .. npc.bonus) or "")
         infoLbl.TextColor3 = Color3.fromRGB(200, 200, 200)
         infoLbl.Font = Enum.Font.Gotham
         infoLbl.TextSize = 13
@@ -1600,6 +1600,47 @@ local function updateBattleUI(data)
         )
         npcHpText.Text = enemyPet.hp .. " / " .. enemyPet.maxHp .. " HP"
         npcPetCount.Text = enemyPet.isBoss and "BOSS" or ("Pet " .. data.npcCurrent .. " / " .. #data.npcPets)
+
+        -- jauge de chaleur du Golem : se remplit a chaque attaque, eruption a 100 %, puis refroidit
+        local gauge = npcPetFrame:FindFirstChild("HeatGauge")
+        if not gauge then
+            gauge = Instance.new("Frame")
+            gauge.Name = "HeatGauge"
+            gauge.Size = UDim2.new(1, -75, 0, 14)
+            gauge.Position = UDim2.new(0, 65, 0, 86)
+            gauge.BackgroundColor3 = Color3.fromRGB(40, 30, 30)
+            gauge.ZIndex = 23
+            makeCorner(gauge, 4)
+            gauge.Parent = npcPetFrame
+            local fill = Instance.new("Frame")
+            fill.Name = "Fill"
+            fill.ZIndex = 24
+            makeCorner(fill, 4)
+            fill.Parent = gauge
+            local label = Instance.new("TextLabel")
+            label.Name = "Label"
+            label.Size = UDim2.fromScale(1, 1)
+            label.BackgroundTransparency = 1
+            label.TextColor3 = Color3.fromRGB(255, 255, 255)
+            label.Font = Enum.Font.GothamBlack
+            label.TextScaled = true
+            label.ZIndex = 25
+            label.Parent = gauge
+        end
+        local heat = enemyPet.heat
+        gauge.Visible = heat ~= nil
+        if heat then
+            local fill, label = gauge.Fill, gauge.Label
+            if (enemyPet.cooled or 0) > 0 then
+                fill.Size = UDim2.fromScale(enemyPet.cooled / 2, 1)
+                fill.BackgroundColor3 = Color3.fromRGB(90, 170, 255)
+                label.Text = "\u{2744} REFROIDI : +50 % DÉGÂTS"
+            else
+                fill.Size = UDim2.fromScale(heat / 100, 1)
+                fill.BackgroundColor3 = heat >= 100 and Color3.fromRGB(255, 40, 20) or Color3.fromRGB(255, math.floor(170 - heat), 30)
+                label.Text = heat >= 100 and "\u{1F30B} ÉRUPTION !" or ("\u{1F525} CHALEUR " .. heat .. " %")
+            end
+        end
     end
 
     battleLog.Text = data.log or ""
@@ -1622,6 +1663,10 @@ local function updateBattleUI(data)
     end
 
     guardBtn.Visible = data.active == true and data.turn == "player"
+    -- eruption imminente : le bouton Proteger devient rouge
+    local danger = enemyPet ~= nil and enemyPet.heat ~= nil and enemyPet.heat >= 100 and (enemyPet.cooled or 0) == 0
+    guardBtn.BackgroundColor3 = danger and Color3.fromRGB(220, 50, 40) or Color3.fromRGB(50, 110, 200)
+    guardBtn.Text = danger and "\u{1F6E1} PROTÈGE-TOI !" or "\u{1F6E1} Protéger"
     battleStatus.Text = data.status or ""
     if data.active then
         if data.turn == "player" then
@@ -2975,7 +3020,7 @@ do
                         buy.Text = "\u{2714} Possédé"
                         buy.BackgroundColor3 = Color3.fromRGB(60, 120, 70)
                     elseif not item.available then
-                        buy.Text = "Bientôt"
+                        buy.Text = item.unlock and ("\u{1F512} " .. item.unlock) or "Bientôt"
                         buy.BackgroundColor3 = Color3.fromRGB(80, 80, 95)
                     else
                         buy.Text = "\u{E002} " .. tostring(item.price or "?")

@@ -136,6 +136,7 @@ playerGui.DescendantAdded:Connect(hookButton)
 
 -- combat : le son arrive au moment de l'impact (memes delais que le serveur)
 local lastFx, battleOver = nil, false
+local eruptionWarned = false
 local function onBattle(data)
 	if type(data) ~= "table" then return end
 	if data.fxId and data.fxId ~= lastFx then
@@ -158,6 +159,15 @@ local function onBattle(data)
 	local log = data.log or ""
 	if log:find("BOUCLIER", 1, true) or log:find("bouclier encaisse", 1, true) or log:find("en garde", 1, true) then
 		play("shield")
+	end
+	-- Golem : grondement quand la chaleur atteint 100 % (une fois avant chaque eruption)
+	if (data.status or ""):find("ÉRUPTION imminente", 1, true) then
+		if not eruptionWarned then
+			eruptionWarned = true
+			play("charge")
+		end
+	else
+		eruptionWarned = false
 	end
 	if data.active == false and not battleOver then
 		battleOver = true
