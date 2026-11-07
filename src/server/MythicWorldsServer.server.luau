@@ -1627,7 +1627,7 @@ function Saves.snapshot(s)
 		receipts = table.clone(s.receipts or {}), bought = Saves.deepCopy(s.bought or {}),
 		pendingPets = table.clone(s.pendingPets or {}),
 		tut = s.tut, tutProg = s.tutProg, dex = Saves.deepCopy(s.dex), dexClaimed = Saves.deepCopy(s.dexClaimed),
-		daily = Saves.deepCopy(s.daily), quests = Saves.deepCopy(s.quests),
+		daily = Saves.deepCopy(s.daily), quests = Saves.deepCopy(s.quests), weekly = Saves.deepCopy(s.weekly),
 		auraColor = s.auraColor, trail = s.trail, potions = Saves.deepCopy(s.potions or {}),
 		settings = Saves.deepCopy(s.settings or {}),
 		lastSeen = os.time(),
@@ -5850,7 +5850,9 @@ do
 		{ event = "train",   need = 1, reward = 300, target = "bag",     text = "Entraine tes pets au sac de frappe (appuie sur E)" },
 		{ event = "battle",  need = 1, reward = 500, ui = "combat",      text = "Bats ton premier dresseur : ouvre le menu Combat" },
 	}
-	local TUT_BONUS = 1000 -- bonus de fin de tutoriel (+ potion de chance x2 pendant 5 min)
+	-- bonus de fin de tutoriel (+ potion de chance x2 pendant 5 min), range dans TUT : le bloc
+	-- est a la limite de 200 variables locales de Luau
+	TUT.BONUS = 1000
 
 	-- quetes : 3 tirees chaque jour (meme tirage pour tout le monde)
 	local QUEST_POOL = {
@@ -5865,7 +5867,43 @@ do
 		{ id = "train3",   event = "train",   need = 3,  base = 800,  text = "Entrainer tes pets (3 fois)" },
 		{ id = "train8",   event = "train",   need = 8,  base = 2200, text = "Entrainer tes pets (8 fois)" },
 	}
-	local DAILY = { 500, 1000, 2000, 3500, 5000, 8000, 15000 }   -- le jour 7 donne aussi une potion de chance
+	-- cadeau du jour et quetes de la semaine, ranges dans une seule table : le bloc est a la
+	-- limite de 200 variables locales de Luau
+	local Quests = {
+		DAILY = { 500, 1000, 2000, 3500, 5000, 8000, 15000 },   -- le jour 7 donne aussi une potion de chance
+		-- quetes de la semaine : 2 grandes quetes tirees chaque lundi (meme tirage pour tout le monde),
+		-- chacune donne des coins et 1 potion
+		WEEKLY = {
+			{ id = "w_eggs100",  event = "egg",     need = 100, base = 12000, potion = "luck",  text = "Acheter 100 œufs" },
+			{ id = "w_crys400",  event = "crystal", need = 400, base = 14000, potion = "speed", text = "Ramasser 400 cristaux" },
+			{ id = "w_battle15", event = "battle",  need = 15,  base = 15000, potion = "luck",  text = "Gagner 15 combats" },
+			{ id = "w_fusion5",  event = "fusion",  need = 5,   base = 18000, potion = "luck",  text = "Fusionner des pets (5 fois)" },
+			{ id = "w_train40",  event = "train",   need = 40,  base = 12000, potion = "speed", text = "Entraîner tes pets (40 fois)" },
+		},
+	}
+	-- semaines du lundi au dimanche (le 1er janvier 1970 etait un jeudi)
+	function Quests.week() return (os.time() // 86400 + 3) // 7 end
+	function Quests.weekSecondsLeft() return ((Quests.week() + 1) * 7 - 3) * 86400 - os.time() end
+	function Quests.ensureWeekly(s)
+		if type(s.weekly) ~= "table" then s.weekly = {} end
+		s.weekly.week = math.floor(finiteNumber(s.weekly.week, 0, 0, 1e9))
+		if type(s.weekly.prog) ~= "table" then s.weekly.prog = {} end
+		if type(s.weekly.claimed) ~= "table" then s.weekly.claimed = {} end
+		local w = Quests.week()
+		if s.weekly.week ~= w then
+			s.weekly.week, s.weekly.prog, s.weekly.claimed = w, {}, {}
+		end
+	end
+	function Quests.weeklyList()
+		local rng = Random.new(Quests.week() * 7919 + 13)
+		local idx = {}
+		for i = 1, #Quests.WEEKLY do idx[i] = i end
+		for i = #idx, 2, -1 do
+			local j = rng:NextInteger(1, i)
+			idx[i], idx[j] = idx[j], idx[i]
+		end
+		return { Quests.WEEKLY[idx[1]], Quests.WEEKLY[idx[2]] }
+	end
 
 	local totalPets = 0
 	for _ in pairs(PETS) do totalPets = totalPets + 1 end
@@ -5886,6 +5924,7 @@ do
 		s.quests.day = math.floor(finiteNumber(s.quests.day, 0, 0, 1e9))
 		if type(s.quests.prog) ~= "table" then s.quests.prog = {} end
 		if type(s.quests.claimed) ~= "table" then s.quests.claimed = {} end
+		Quests.ensureWeekly(s)
 	end
 
 	local function today() return os.time() // 86400 end
@@ -6001,10 +6040,23 @@ do
 		local claimedToday = s.daily.day == d
 		local streak = claimedToday and s.daily.streak or ((s.daily.day == d - 1) and (s.daily.streak + 1) or 1)
 		local rewards = {}
-		for i = 1, #DAILY do rewards[i] = math.floor(DAILY[i] * sc) end
+		for i = 1, #Quests.DAILY do rewards[i] = math.floor(Quests.DAILY[i] * sc) end
 		local daily = { claimed = claimedToday, streak = streak, index = ((streak - 1) % 7) + 1, rewards = rewards }
 
-		MetaInfo:FireClient(player, { tut = tut, daily = daily, quests = quests, secondsLeft = 86400 - (os.time() % 86400) })
+		local weekly = {}
+		for i, q in ipairs(Quests.weeklyList()) do
+			weekly[i] = {
+				id = q.id, text = q.text, need = q.need, potion = q.potion,
+				prog = math.min(q.need, s.weekly.prog[q.id] or 0),
+				reward = math.floor(q.base * sc),
+				claimed = s.weekly.claimed[q.id] == true,
+			}
+		end
+
+		MetaInfo:FireClient(player, {
+			tut = tut, daily = daily, quests = quests, secondsLeft = 86400 - (os.time() % 86400),
+			weekly = weekly, weekSecondsLeft = Quests.weekSecondsLeft(),
+		})
 	end
 
 	local function satisfied(s, step)
@@ -6025,11 +6077,11 @@ do
 				s.tut = s.tut + 1
 				s.tutProg = 0
 				if s.tut > #TUT then
-					s.coins = s.coins + TUT_BONUS
+					s.coins = s.coins + TUT.BONUS
 					s.luckUntil = math.max(os.time(), s.luckUntil or 0) + 300
 					s.luckMult = math.max(s.luckMult or 1, 2)
 					task.delay(1.5, function()
-						if player.Parent then notify(player, "Tutoriel termine ! Tout est debloque : +" .. fmt(TUT_BONUS) .. " coins et chance x2 (5 min)", GOLD) end
+						if player.Parent then notify(player, "Tutoriel termine ! Tout est debloque : +" .. fmt(TUT.BONUS) .. " coins et chance x2 (5 min)", GOLD) end
 					end)
 				end
 				sendState(player)
@@ -6083,6 +6135,9 @@ do
 		for _, q in ipairs(todaysQuests(today())) do
 			if q.event == event then s.quests.prog[q.id] = (s.quests.prog[q.id] or 0) + 1 end
 		end
+		for _, q in ipairs(Quests.weeklyList()) do
+			if q.event == event then s.weekly.prog[q.id] = (s.weekly.prog[q.id] or 0) + 1 end
+		end
 		sendMeta(player)
 	end
 
@@ -6133,7 +6188,7 @@ do
 		end
 		local streak = (s.daily.day == d - 1) and (s.daily.streak + 1) or 1
 		local idx = ((streak - 1) % 7) + 1
-		local reward = math.floor(DAILY[idx] * scale(s))
+		local reward = math.floor(Quests.DAILY[idx] * scale(s))
 		s.coins = s.coins + reward
 		local extra = ""
 		if idx == 7 then
@@ -6193,6 +6248,24 @@ do
 	end
 
 	local lastAct = {}
+	function Quests.claimWeekly(player, s, id)
+		Quests.ensureWeekly(s)
+		for _, q in ipairs(Quests.weeklyList()) do
+			if q.id == id then
+				if s.weekly.claimed[id] or (s.weekly.prog[id] or 0) < q.need then return end
+				s.weekly.claimed[id] = true
+				local reward = math.floor(q.base * scale(s))
+				s.coins = s.coins + reward
+				s.potions[q.potion] = (s.potions[q.potion] or 0) + 1
+				notify(player, "Quête de la semaine : +" .. fmt(reward) .. " coins + 1 potion !", GOLD)
+				sendState(player)
+				savePlayer(player)
+				sendMeta(player)
+				return
+			end
+		end
+	end
+
 	MetaAction.OnServerEvent:Connect(function(player, kind, arg)
 		if type(kind) ~= "string" then return end
 		local now = os.clock()
@@ -6207,6 +6280,8 @@ do
 			claimDaily(player, s)
 		elseif kind == "quest" then
 			if type(arg) == "string" and #arg <= 20 then claimQuest(player, s, arg) end
+		elseif kind == "weekly" then
+			if type(arg) == "string" and #arg <= 20 then Quests.claimWeekly(player, s, arg) end
 		elseif kind == "dexinfo" then
 			sendDex(player)
 		elseif kind == "dex" then

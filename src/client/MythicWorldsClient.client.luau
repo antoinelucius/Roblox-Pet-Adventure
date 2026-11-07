@@ -3222,6 +3222,49 @@ do
 
     local questPanel, questScroll, questStatus = makePanel("Quêtes", 520, 540)
     listLayout(questScroll, 10)
+    do
+        -- style du menu Quetes : fond noir, bord bleu a plots de briques, grand titre degrade
+        questPanel.BackgroundColor3 = Color3.fromRGB(14, 16, 24)
+        new("UIStroke", { Color = Color3.fromRGB(40, 140, 235), Thickness = 6 }, questPanel)
+        for _, child in ipairs(questPanel:GetChildren()) do
+            if child:IsA("TextLabel") then
+                child.Visible = false   -- ancien petit titre et sous-titre
+            elseif child:IsA("TextButton") then
+                -- croix rouge sur le coin, comme une etiquette
+                child.Position = UDim2.new(1, -30, 0, -16)
+                child.Size = UDim2.new(0, 46, 0, 46)
+                child.BackgroundColor3 = Color3.fromRGB(225, 20, 20)
+                child.TextSize = 26
+                child.ZIndex = 9
+                new("UIStroke", { Color = Color3.fromRGB(10, 14, 24), Thickness = 2, ApplyStrokeMode = Enum.ApplyStrokeMode.Border }, child)
+            end
+        end
+        for _, y in ipairs({ -6, 0 }) do
+            local studs = new("Frame", {
+                Position = (y < 0) and UDim2.new(0, 10, 0, -6) or UDim2.new(0, 10, 1, 0),
+                Size = UDim2.new(1, -20, 0, 6), BackgroundTransparency = 1, ZIndex = 8,
+            }, questPanel)
+            new("UIListLayout", {
+                FillDirection = Enum.FillDirection.Horizontal, HorizontalFlex = Enum.UIFlexAlignment.SpaceEvenly,
+                VerticalAlignment = Enum.VerticalAlignment.Center,
+            }, studs)
+            for _ = 1, 22 do
+                makeCorner(new("Frame", { Size = UDim2.new(0, 5, 0, 5), BackgroundColor3 = Color3.fromRGB(16, 70, 150), ZIndex = 8 }, studs), 1)
+            end
+        end
+        local bigTitle = new("TextLabel", {
+            Position = UDim2.new(0, 0, 0, 4), Size = UDim2.new(1, 0, 0, 66), BackgroundTransparency = 1,
+            Text = "Quêtes", TextColor3 = WHITE, Font = Enum.Font.FredokaOne, TextSize = 48, ZIndex = 7,
+        }, questPanel)
+        new("UIGradient", {
+            Rotation = 90,
+            Color = ColorSequence.new(Color3.fromRGB(110, 205, 255), Color3.fromRGB(25, 110, 225)),
+        }, bigTitle)
+        new("UIStroke", { Color = Color3.fromRGB(8, 28, 70), Thickness = 3 }, bigTitle)
+        questScroll.Position = UDim2.new(0, 14, 0, 76)
+        questScroll.Size = UDim2.new(1, -28, 1, -90)
+        questScroll.ScrollBarThickness = 4
+    end
     local boardPanel, boardScroll, boardStatus = makePanel("Classement du serveur", 480, 460)
     listLayout(boardScroll, 8)
     table.insert(extraPanels, questPanel)
@@ -3233,75 +3276,186 @@ do
         clearFrames(questScroll)
         dailyBtn = nil
         if not meta.daily then questStatus.Text = "Chargement..." return end
-        questStatus.Text = "Nouvelles quêtes chaque jour"
         local d = meta.daily
+        local left = (meta.secondsLeft or 0) - (os.clock() - metaAt)
+        local GREEN, GOLD = Color3.fromRGB(70, 230, 90), Color3.fromRGB(255, 200, 40)
+        local INK = Color3.fromRGB(10, 14, 24)
+        local order = 0
+        local function place(height, props)
+            order = order + 1
+            props.LayoutOrder = order
+            props.Size = UDim2.new(1, -8, 0, height)
+            props.ZIndex = 6
+            return new("Frame", props, questScroll)
+        end
+        local function inked(label, thickness)
+            new("UIStroke", { Color = INK, Thickness = thickness or 2 }, label)
+            return label
+        end
+        local function timerText(seconds)
+            local s = math.max(0, math.floor(seconds))
+            if s >= 86400 then
+                return string.format("%dj %dh %dm", s // 86400, (s % 86400) // 3600, (s % 3600) // 60)
+            end
+            return string.format("%dh %dm %ds", s // 3600, (s % 3600) // 60, s % 60)
+        end
+        -- titre de partie en grosses lettres, minuteur a droite (mis a jour plus bas)
+        local function section(title, color, timerName, seconds)
+            local head = place(46, { BackgroundTransparency = 1 })
+            local titleLabel = inked(new("TextLabel", {
+                Size = UDim2.new(0.66, 0, 1, 0), BackgroundTransparency = 1, Text = title, TextColor3 = color,
+                Font = Enum.Font.FredokaOne, TextSize = 32, TextScaled = true, TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 7,
+            }, head), 3)
+            new("UITextSizeConstraint", { MaxTextSize = 32 }, titleLabel)
+            inked(new("TextLabel", {
+                Name = timerName or "QuestTimer", AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, 0, 0, 0),
+                Size = UDim2.new(0.34, 0, 1, 0), BackgroundTransparency = 1, Text = timerText(seconds or left), TextColor3 = color,
+                Font = Enum.Font.FredokaOne, TextSize = 20, TextXAlignment = Enum.TextXAlignment.Right, ZIndex = 7,
+            }, head))
+        end
+        local function note(text)
+            local f = place(36, { BackgroundTransparency = 1 })
+            new("TextLabel", {
+                Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1, Text = text, TextColor3 = Color3.fromRGB(120, 122, 138),
+                Font = Enum.Font.FredokaOne, TextSize = 17, TextWrapped = true, ZIndex = 7,
+            }, f)
+        end
+        local function card(height)
+            local f = place(height, { BackgroundColor3 = Color3.fromRGB(30, 32, 44) })
+            makeCorner(f, 14)
+            return f
+        end
+        local function claimButton(parent, text, onClick)
+            local b = new("TextButton", {
+                AnchorPoint = Vector2.new(1, 1), Position = UDim2.new(1, -12, 1, -10), Size = UDim2.new(0, 150, 0, 34),
+                BackgroundColor3 = Color3.fromRGB(0, 190, 90), Text = text, TextColor3 = WHITE,
+                Font = Enum.Font.FredokaOne, TextSize = 18, ZIndex = 8,
+            }, parent)
+            makeCorner(b, 10)
+            new("UIStroke", { Color = INK, Thickness = 2, ApplyStrokeMode = Enum.ApplyStrokeMode.Border }, b)
+            inked(b)
+            b.MouseButton1Click:Connect(onClick)
+            return b
+        end
 
-        local card = new("Frame", { LayoutOrder = 1, Size = UDim2.new(1, -8, 0, 160), BackgroundColor3 = Color3.fromRGB(40, 40, 58), ZIndex = 6 }, questScroll)
-        makeCorner(card, 12)
-        new("TextLabel", {
-            Size = UDim2.new(1, -20, 0, 26), Position = UDim2.new(0, 10, 0, 6), BackgroundTransparency = 1,
-            Text = "Cadeau du jour  ·  jour " .. d.streak, TextColor3 = GOLDC, Font = Enum.Font.GothamBold,
-            TextSize = 16, TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 7,
-        }, card)
-        local row = new("Frame", { Size = UDim2.new(1, -20, 0, 62), Position = UDim2.new(0, 10, 0, 38), BackgroundTransparency = 1, ZIndex = 7 }, card)
+        -- ----- cadeau du jour : 7 jours d'affilee -----
+        section("CADEAU DU JOUR", GREEN)
+        local gift = card(d.claimed and 84 or 132)
+        local row = new("Frame", { Size = UDim2.new(1, -20, 0, 62), Position = UDim2.new(0, 10, 0, 11), BackgroundTransparency = 1, ZIndex = 7 }, gift)
         for i = 1, 7 do
-            local cur = (i == d.index)
+            local taken = i < d.index or (i == d.index and d.claimed)
+            local today = i == d.index and not d.claimed
             local box = new("Frame", {
-                Size = UDim2.new(1 / 7, -4, 1, 0), Position = UDim2.new((i - 1) / 7, 2, 0, 0),
-                BackgroundColor3 = cur and Color3.fromRGB(200, 150, 40) or Color3.fromRGB(55, 55, 78), ZIndex = 8,
+                Size = UDim2.new(1 / 7, -6, 1, 0), Position = UDim2.new((i - 1) / 7, 3, 0, 0),
+                BackgroundColor3 = today and Color3.fromRGB(230, 165, 30) or (taken and Color3.fromRGB(35, 120, 60) or Color3.fromRGB(46, 48, 64)),
+                ZIndex = 8,
             }, row)
             makeCorner(box, 8)
-            new("TextLabel", { Size = UDim2.new(1, 0, 0, 20), Position = UDim2.new(0, 0, 0, 4), BackgroundTransparency = 1, Text = "J" .. i, TextColor3 = WHITE, Font = Enum.Font.GothamBold, TextSize = 13, ZIndex = 9 }, box)
-            new("TextLabel", { Size = UDim2.new(1, 0, 0, 22), Position = UDim2.new(0, 0, 0, 30), BackgroundTransparency = 1, Text = fmtShort(d.rewards[i]), TextColor3 = Color3.fromRGB(120, 255, 160), Font = Enum.Font.GothamBold, TextSize = 12, ZIndex = 9 }, box)
+            if today then new("UIStroke", { Color = Color3.fromRGB(255, 235, 140), Thickness = 2 }, box) end
+            inked(new("TextLabel", { Size = UDim2.new(1, 0, 0, 22), Position = UDim2.new(0, 0, 0, 5), BackgroundTransparency = 1, Text = "J" .. i, TextColor3 = WHITE, Font = Enum.Font.FredokaOne, TextSize = 15, ZIndex = 9 }, box))
+            inked(new("TextLabel", {
+                Size = UDim2.new(1, -4, 0, 22), Position = UDim2.new(0, 2, 0, 32), BackgroundTransparency = 1,
+                Text = taken and "\u{2714}" or fmtShort(d.rewards[i]), TextColor3 = taken and WHITE or Color3.fromRGB(140, 255, 160),
+                Font = Enum.Font.FredokaOne, TextSize = 14, TextScaled = true, ZIndex = 9,
+            }, box))
         end
-        dailyBtn = new("TextButton", {
-            Size = UDim2.new(1, -20, 0, 38), Position = UDim2.new(0, 10, 1, -46), Font = Enum.Font.GothamBold, TextSize = 15,
-            TextColor3 = WHITE, ZIndex = 7,
-        }, card)
-        makeCorner(dailyBtn, 8)
-        if d.claimed then
-            dailyBtn.BackgroundColor3 = Color3.fromRGB(80, 80, 95)
-            dailyBtn.Text = "Prochain cadeau dans " .. fmtClock((meta.secondsLeft or 0) - (os.clock() - metaAt))
-        else
-            dailyBtn.BackgroundColor3 = Color3.fromRGB(0, 150, 90)
-            dailyBtn.Text = "Récupérer"
-            dailyBtn.MouseButton1Click:Connect(function() MetaAction:FireServer("daily") end)
+        if not d.claimed then
+            dailyBtn = claimButton(gift, "Récupérer +" .. fmtShort(d.rewards[d.index]), function() MetaAction:FireServer("daily") end)
+            dailyBtn.AnchorPoint = Vector2.new(0.5, 1)
+            dailyBtn.Position = UDim2.new(0.5, 0, 1, -10)
+            dailyBtn.Size = UDim2.new(1, -20, 0, 40)
         end
 
-        for i, q in ipairs(meta.quests or {}) do
-            local r = new("Frame", { LayoutOrder = 1 + i, Size = UDim2.new(1, -8, 0, 78), BackgroundColor3 = Color3.fromRGB(40, 40, 58), ZIndex = 6 }, questScroll)
-            makeCorner(r, 12)
-            new("TextLabel", {
-                Size = UDim2.new(1, -150, 0, 24), Position = UDim2.new(0, 10, 0, 8), BackgroundTransparency = 1,
-                Text = q.text .. "  (" .. q.prog .. "/" .. q.need .. ")", TextColor3 = WHITE, Font = Enum.Font.GothamBold,
-                TextSize = 14, TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 7,
-            }, r)
-            local bar = new("Frame", { Size = UDim2.new(1, -150, 0, 10), Position = UDim2.new(0, 10, 0, 38), BackgroundColor3 = Color3.fromRGB(55, 55, 75), ZIndex = 7 }, r)
-            makeCorner(bar, 5)
-            local fill = new("Frame", { Size = UDim2.new(math.clamp(q.prog / q.need, 0, 1), 0, 1, 0), BackgroundColor3 = Color3.fromRGB(90, 200, 120), ZIndex = 8 }, bar)
-            makeCorner(fill, 5)
-            new("TextLabel", {
-                Size = UDim2.new(1, -150, 0, 18), Position = UDim2.new(0, 10, 0, 54), BackgroundTransparency = 1,
-                Text = "+" .. fmtNum(q.reward) .. " coins", TextColor3 = GOLDC, Font = Enum.Font.Gotham,
-                TextSize = 12, TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 7,
-            }, r)
-            local b = new("TextButton", {
-                Size = UDim2.new(0, 120, 0, 38), Position = UDim2.new(1, -130, 0.5, -19), Font = Enum.Font.GothamBold,
-                TextSize = 14, TextColor3 = WHITE, ZIndex = 7,
-            }, r)
-            makeCorner(b, 8)
-            if q.claimed then
-                b.Text = "Fait"
-                b.BackgroundColor3 = Color3.fromRGB(70, 110, 80)
-            elseif q.prog >= q.need then
-                b.Text = "Reclamer"
-                b.BackgroundColor3 = Color3.fromRGB(0, 150, 90)
-                b.MouseButton1Click:Connect(function() MetaAction:FireServer("quest", q.id) end)
-            else
-                b.Text = "En cours"
-                b.BackgroundColor3 = Color3.fromRGB(80, 80, 95)
+        -- ----- quetes du jour -----
+        section("QUÊTES DU JOUR", GOLD)
+        local remaining = 0
+        for _, q in ipairs(meta.quests or {}) do
+            if not q.claimed then
+                remaining = remaining + 1
+                local done = q.prog >= q.need
+                local c = card(112)
+                inked(new("TextLabel", {
+                    Size = UDim2.new(1, -24, 0, 26), Position = UDim2.new(0, 14, 0, 8), BackgroundTransparency = 1,
+                    Text = q.text, TextColor3 = WHITE, Font = Enum.Font.FredokaOne, TextSize = 19,
+                    TextXAlignment = Enum.TextXAlignment.Left, TextScaled = true, ZIndex = 7,
+                }, c))
+                local bar = new("Frame", { Size = UDim2.new(1, -28, 0, 26), Position = UDim2.new(0, 14, 0, 40), BackgroundColor3 = Color3.fromRGB(52, 54, 70), ZIndex = 7 }, c)
+                makeCorner(bar, 8)
+                local fill = new("Frame", {
+                    Size = UDim2.new(math.clamp(q.prog / q.need, 0, 1), 0, 1, 0),
+                    BackgroundColor3 = done and GOLD or Color3.fromRGB(80, 200, 110), ZIndex = 8,
+                }, bar)
+                makeCorner(fill, 8)
+                inked(new("TextLabel", {
+                    Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1, Text = math.min(q.prog, q.need) .. " / " .. q.need,
+                    TextColor3 = WHITE, Font = Enum.Font.FredokaOne, TextSize = 16, ZIndex = 9,
+                }, bar))
+                -- recompense : pastille verte
+                local pill = new("Frame", {
+                    AnchorPoint = Vector2.new(0, 1), Position = UDim2.new(0, 14, 1, -10), Size = UDim2.new(0, 150, 0, 34),
+                    BackgroundColor3 = Color3.fromRGB(40, 175, 70), ZIndex = 7,
+                }, c)
+                makeCorner(pill, 10)
+                new("UIStroke", { Color = Color3.fromRGB(150, 255, 120), Thickness = 2, ApplyStrokeMode = Enum.ApplyStrokeMode.Border }, pill)
+                inked(new("TextLabel", {
+                    Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1, Text = "\u{1F4B0} +" .. fmtShort(q.reward),
+                    TextColor3 = WHITE, Font = Enum.Font.FredokaOne, TextSize = 17, ZIndex = 8,
+                }, pill))
+                if done then
+                    claimButton(c, "Récupérer !", function() MetaAction:FireServer("quest", q.id) end)
+                end
             end
         end
+        if remaining == 0 then note("Toutes les quêtes du jour sont terminées !") end
+
+        -- ----- quetes de la semaine : plus longues, coins + 1 potion -----
+        local PURPLE = Color3.fromRGB(190, 120, 255)
+        section("QUÊTES DE LA SEMAINE", PURPLE, "WeekTimer", (meta.weekSecondsLeft or 0) - (os.clock() - metaAt))
+        local weekLeft = 0
+        for _, q in ipairs(meta.weekly or {}) do
+            if not q.claimed then
+                weekLeft = weekLeft + 1
+                local done = q.prog >= q.need
+                local c = card(112)
+                inked(new("TextLabel", {
+                    Size = UDim2.new(1, -24, 0, 26), Position = UDim2.new(0, 14, 0, 8), BackgroundTransparency = 1,
+                    Text = q.text, TextColor3 = WHITE, Font = Enum.Font.FredokaOne, TextSize = 19,
+                    TextXAlignment = Enum.TextXAlignment.Left, TextScaled = true, ZIndex = 7,
+                }, c))
+                local bar = new("Frame", { Size = UDim2.new(1, -28, 0, 26), Position = UDim2.new(0, 14, 0, 40), BackgroundColor3 = Color3.fromRGB(52, 54, 70), ZIndex = 7 }, c)
+                makeCorner(bar, 8)
+                local fill = new("Frame", {
+                    Size = UDim2.new(math.clamp(q.prog / q.need, 0, 1), 0, 1, 0),
+                    BackgroundColor3 = done and GOLD or PURPLE, ZIndex = 8,
+                }, bar)
+                makeCorner(fill, 8)
+                inked(new("TextLabel", {
+                    Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1, Text = math.min(q.prog, q.need) .. " / " .. q.need,
+                    TextColor3 = WHITE, Font = Enum.Font.FredokaOne, TextSize = 16, ZIndex = 9,
+                }, bar))
+                -- deux recompenses : les coins (vert) et une potion (violet)
+                for k, reward in ipairs({
+                    { text = "\u{1F4B0} +" .. fmtShort(q.reward), color = Color3.fromRGB(40, 175, 70), edge = Color3.fromRGB(150, 255, 120) },
+                    { text = "\u{1F9EA} +1 potion", color = Color3.fromRGB(130, 70, 210), edge = Color3.fromRGB(215, 170, 255) },
+                }) do
+                    local pill = new("Frame", {
+                        AnchorPoint = Vector2.new(0, 1), Position = UDim2.new(0, 14 + (k - 1) * 128, 1, -10), Size = UDim2.new(0, 120, 0, 34),
+                        BackgroundColor3 = reward.color, ZIndex = 7,
+                    }, c)
+                    makeCorner(pill, 10)
+                    new("UIStroke", { Color = reward.edge, Thickness = 2, ApplyStrokeMode = Enum.ApplyStrokeMode.Border }, pill)
+                    inked(new("TextLabel", {
+                        Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1, Text = reward.text,
+                        TextColor3 = WHITE, Font = Enum.Font.FredokaOne, TextSize = 16, ZIndex = 8,
+                    }, pill))
+                end
+                if done then
+                    local b = claimButton(c, "Récupérer !", function() MetaAction:FireServer("weekly", q.id) end)
+                    b.Size = UDim2.new(0, 120, 0, 34)
+                end
+            end
+        end
+        if weekLeft == 0 then note("Toutes les quêtes de la semaine sont terminées !") end
     end
 
     -- ----- classement -----
@@ -3351,6 +3505,9 @@ do
         for _, q in ipairs(meta.quests or {}) do
             if not q.claimed and q.prog >= q.need then return true end
         end
+        for _, q in ipairs(meta.weekly or {}) do
+            if not q.claimed and q.prog >= q.need then return true end
+        end
         return false
     end
 
@@ -3386,8 +3543,16 @@ do
             local char = player.Character
             local hrp = char and char:FindFirstChild("HumanoidRootPart")
             marker.Parent = nil -- remplace par le guide en pointilles (plus bas)
-            if dailyBtn and questPanel.Visible and meta.daily and meta.daily.claimed then
-                dailyBtn.Text = "Prochain cadeau dans " .. fmtClock((meta.secondsLeft or 0) - (os.clock() - metaAt))
+            if questPanel.Visible then
+                -- minuteurs des parties du menu Quetes
+                local s = math.max(0, math.floor((meta.secondsLeft or 0) - (os.clock() - metaAt)))
+                local text = string.format("%dh %dm %ds", s // 3600, (s % 3600) // 60, s % 60)
+                local w = math.max(0, math.floor((meta.weekSecondsLeft or 0) - (os.clock() - metaAt)))
+                local weekText = string.format("%dj %dh %dm", w // 86400, (w % 86400) // 3600, (w % 3600) // 60)
+                for _, item in ipairs(questScroll:GetDescendants()) do
+                    if item.Name == "QuestTimer" then item.Text = text
+                    elseif item.Name == "WeekTimer" then item.Text = weekText end
+                end
             end
         end
     end)
