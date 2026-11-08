@@ -163,11 +163,15 @@ local function styleButton(button)
 	end)
 end
 
+-- boutons du menu : reconnus a leur nom, ou a la marque posee par MWS_MobileHud sur telephone
+-- (il remplace le nom par l'icone, parfois avant que ce script ne demarre)
 for _, child in ipairs(gui:GetChildren()) do
 	if child:IsA("TextButton") and child.Visible then
+		if child:GetAttribute("MWS_MenuButton") then styleButton(child) end
 		for _, name in ipairs(MENU) do
 			if child.Text:find(name, 1, true) then styleButton(child) end
 		end
+		child:GetAttributeChangedSignal("MWS_MenuButton"):Connect(function() styleButton(child) end)
 	end
 end
 -- la roue dentee des parametres et le bouton Maitrise (MWS_Mastery) arrivent un peu apres le menu

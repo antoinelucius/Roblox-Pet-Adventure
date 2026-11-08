@@ -34,6 +34,8 @@ local function place(button, index)
 	button.Position = UDim2.fromOffset(LEFT + column * (BUTTON + GAP), TOP + row * (BUTTON + GAP))
 	button.TextScaled = false
 	button.TextSize = 20
+	-- marque du bouton de menu : MWS_Style le reconnait meme quand son nom a ete remplace par l'icone
+	button:SetAttribute("MWS_MenuButton", true)
 	iconOnly(button)
 end
 
