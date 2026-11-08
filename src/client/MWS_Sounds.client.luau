@@ -218,10 +218,12 @@ remotes:WaitForChild("BuyEgg").OnClientEvent:Connect(function(data)
 		play("reveal", 3.8)
 	elseif player:GetAttribute("MWS_SetEggs") == false then
 		play("reveal")   -- pas d'animation d'oeuf : juste le son du resultat
-	else
-		play("egg", 0.5)
-		play("egg", 1.2)
 	end
+end)
+-- pendant l'animation : craquements, grondement et explosion, au rythme de l'oeuf
+SoundService:GetAttributeChangedSignal("MWS_EggSfx"):Connect(function()
+	local name = string.match(tostring(SoundService:GetAttribute("MWS_EggSfx")), "^(%a+)|")
+	if name == "egg" or name == "charge" or name == "boom" then play(name) end
 end)
 SoundService:GetAttributeChangedSignal("MWS_EggBurst"):Connect(function()
 	play("reveal")

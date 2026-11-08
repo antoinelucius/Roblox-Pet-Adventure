@@ -1899,12 +1899,14 @@ end)
 -- ============================================================
 
 -- Cinematique d'eclosion, jouee devant la camera (visible seulement par le joueur).
--- Niveau 1 : oeufs simples (secousses + pop). Niveau 2 : oeufs rares (eclats qui orbitent,
--- fissures lumineuses). Niveau 3 : oeufs puissants (ecran assombri, cercle de feu,
--- petits demons ou cristaux qui tournent autour, puis grosse explosion).
+-- Plus le pet obtenu est rare, plus l'animation est grande, longue et belle :
+--   Commun : secousses + pop. Rare : eclats qui tournent, fissures lumineuses.
+--   Epique : + anneau au sol, nom de la rarete. Legendaire : la nuit tombe, colonne de lumiere,
+--   aureole, braises, l'oeuf s'envole. Mythique : + cercle de feu, demons ou cristaux, eclairs.
+--   Divin / Secret : 3 colonnes, double aureole (arc-en-ciel pour Secret), battements de coeur.
 local EggModels = require(ReplicatedStorage:WaitForChild("MWS_EggModels"))
 local Lighting = game:GetService("Lighting")
-local EGG_TIER = { base = 1, dore = 1, mythique = 2, celeste = 2, fusion = 2, lave = 3, primordial = 3 }
+local HATCH_LEVEL = { Commun = 1, Rare = 2, Epique = 3, Legendaire = 4, Mythique = 5, Divin = 6, Secret = 7 }
 local FIRE_TEX = "rbxasset://textures/particles/fire_main.dds"
 local SPARK_TEX = "rbxasset://textures/particles/sparkles_main.dds"
 
@@ -2010,10 +2012,37 @@ local function hideStandEgg(eggIndex, hide)
             d.Enabled = not hide
         end
     end
+    -- ton personnage et les pets qui suivent sont caches aussi (ils se mettaient devant l'oeuf) ;
+    -- on note leur etat d'avant pour le remettre a la fin (reglages "voir les pets" respectes)
+    local holders = {}
+    if player.Character then table.insert(holders, player.Character) end
+    local generated = workspace:FindFirstChild("MWS_Generated")
+    if generated and generated:FindFirstChild("Pets") then table.insert(holders, generated.Pets) end
+    for _, holder in ipairs(holders) do
+        for _, p in ipairs(holder:GetDescendants()) do
+            if p:IsA("BasePart") or p:IsA("Decal") then
+                if hide then
+                    if p:GetAttribute("MWS_HatchLTM") == nil then p:SetAttribute("MWS_HatchLTM", p.LocalTransparencyModifier) end
+                    p.LocalTransparencyModifier = 1
+                elseif p:GetAttribute("MWS_HatchLTM") ~= nil then
+                    p.LocalTransparencyModifier = p:GetAttribute("MWS_HatchLTM")
+                    p:SetAttribute("MWS_HatchLTM", nil)
+                end
+            elseif p:IsA("BillboardGui") or p:IsA("ParticleEmitter") then
+                if hide then
+                    if p:GetAttribute("MWS_HatchOn") == nil then p:SetAttribute("MWS_HatchOn", p.Enabled) end
+                    p.Enabled = false
+                elseif p:GetAttribute("MWS_HatchOn") ~= nil then
+                    p.Enabled = p:GetAttribute("MWS_HatchOn")
+                    p:SetAttribute("MWS_HatchOn", nil)
+                end
+            end
+        end
+    end
 end
 
 -- le pet sort de l'oeuf, tourne sur lui-meme, avec son nom au-dessus (sans cadre)
-local function revealPet(folder, center, away, pet, height)
+local function revealPet(folder, center, away, pet, height, hold)
     local info = PetBricks.measure(pet.name)
     if not info then return end
     local m = Instance.new("Model")
@@ -2067,14 +2096,20 @@ local function revealPet(folder, center, away, pet, height)
     for _, l in ipairs(labels) do
         TweenService:Create(l, TweenInfo.new(0.3), { TextTransparency = 0, TextStrokeTransparency = 0.45 }):Play()
     end
-    task.wait(2.3)
+    task.wait(hold or 2.3)
     conn:Disconnect()
 end
 
--- center = position de l'oeuf sur le socle ; la camera se tourne vers lui pendant l'animation
-local function playEggCinematic(style, tier, center, eggIndex, pet)
+-- center = position de l'oeuf sur le socle ; la camera se tourne vers lui pendant l'animation.
+-- level = taille de l'animation, donnee par la rarete du pet obtenu (1 Commun ... 7 Secret)
+local function playEggCinematic(style, level, center, eggIndex, pet)
     local cam = workspace.CurrentCamera
     local st = EggModels.STYLES[style] or EggModels.STYLES.base
+    local WHITE = Color3.new(1, 1, 1)
+    local rc = RARITY_COLORS[pet and pet.rarity] or st.glow
+    local SoundService = game:GetService("SoundService")
+    -- sons de l'animation (joues par MWS_Sounds) : craquements, grondement, explosion
+    local function sfx(name) SoundService:SetAttribute("MWS_EggSfx", name .. "|" .. os.clock()) end
     local folder = Instance.new("Folder")
     folder.Name = "MWS_HatchFX"
     folder.Parent = workspace
@@ -2089,17 +2124,23 @@ local function playEggCinematic(style, tier, center, eggIndex, pet)
     away = Vector3.new(away.X, 0, away.Z)
     if away.Magnitude < 0.1 then away = Vector3.new(0, 0, 1) end
     away = away.Unit
-    local camPos = center + away * 15 + Vector3.new(0, 4, 0)
+    local right = away:Cross(Vector3.yAxis).Unit
     cam.CameraType = Enum.CameraType.Scriptable
     TweenService:Create(cam, TweenInfo.new(0.5, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut),
-        { CFrame = CFrame.lookAt(camPos, center + Vector3.new(0, 0.8, 0)) }):Play()
+        { CFrame = CFrame.lookAt(center + away * ((level >= 4) and 19 or 15) + Vector3.new(0, 4, 0), center + Vector3.new(0, 0.8, 0)) }):Play()
 
-    local S = { y = 0, tilt = 0, spin = 0, boom = nil }
-    local orbit, imps = {}, {}
+    local S = { y = 0, yc = 0, tilt = 0, spin = 0, boom = nil, reveal = nil, rise = 0 }
+    local orbit, imps, rings, pillars = {}, {}, {}, {}
+    local banner, rainbow
     local t0 = os.clock()
-    local conn = RunService.RenderStepped:Connect(function()
+    local conn = RunService.RenderStepped:Connect(function(dt)
         local t = os.clock() - t0
-        local c = center + Vector3.new(0, S.y, 0)
+        S.yc = S.yc + (S.y - S.yc) * math.min(1, dt * 3)
+        if S.reveal then
+            local e = math.clamp((os.clock() - S.reveal) / 0.6, 0, 1)
+            S.rise = 0.4 * (1 - (1 - e) * (1 - e))
+        end
+        local c = center + Vector3.new(0, S.yc, 0)
         root.CFrame = CFrame.new(c) * CFrame.fromAxisAngle(away, S.tilt) * CFrame.Angles(0, S.spin, 0)
         local spread = S.boom and (os.clock() - S.boom) * 30 or 0
         for i, o in ipairs(orbit) do
@@ -2113,6 +2154,31 @@ local function playEggCinematic(style, tier, center, eggIndex, pet)
             local ahead = pos + Vector3.new(-math.sin(a), 0, math.cos(a))
             imp.obj.set(CFrame.lookAt(pos, ahead), t)
         end
+        -- anneaux de lumiere : au sol, ou en aureole face a la camera (autour de l'oeuf, puis du pet)
+        for _, rg in ipairs(rings) do
+            local g = math.clamp((os.clock() - rg.born) / 0.7, 0, 1)
+            g = 1 - (1 - g) * (1 - g) * (1 - g)
+            local r = rg.r * g + (rg.halo and S.rise * 2 or spread)
+            local ctr = rg.halo and (c + Vector3.new(0, S.rise, 0) - away * 0.6) or (center + Vector3.new(0, rg.h, 0))
+            local n = #rg.parts
+            for j, p in ipairs(rg.parts) do
+                local a = t * rg.speed + j / n * math.pi * 2
+                local pos, tang
+                if rg.halo then
+                    pos = ctr + right * (math.cos(a) * r) + Vector3.yAxis * (math.sin(a) * r)
+                    tang = Vector3.yAxis * math.cos(a) - right * math.sin(a)
+                else
+                    pos = ctr + Vector3.new(math.cos(a) * r, 0, math.sin(a) * r)
+                    tang = Vector3.new(-math.sin(a), 0, math.cos(a))
+                end
+                p.CFrame = CFrame.lookAt(pos, pos + tang)
+                if rg.rainbow then p.Color = Color3.fromHSV((j / n + t * 0.35) % 1, 0.6, 1) end
+            end
+        end
+        if not S.boom then
+            for _, pl in ipairs(pillars) do pl.p.Transparency = 0.35 + 0.15 * math.sin(t * 9 + pl.phase) end
+        end
+        if rainbow then rainbow.Rotation = (t * 140) % 360 end
     end)
 
     local function wobble(n, amp, dur)
@@ -2122,35 +2188,137 @@ local function playEggCinematic(style, tier, center, eggIndex, pet)
         end
         S.tilt = 0
     end
+    -- fissures lumineuses sur la coquille (une brique sur "every")
+    local function crack(every, col)
+        for i, p in ipairs(info.shell) do
+            if i % every == 0 then p.Material = Enum.Material.Neon; p.Color = col end
+        end
+    end
+    -- anneau fait de petits segments lumineux
+    local function ring(r, n, col, thick, opts)
+        local rg = { parts = {}, r = r, born = os.clock(), speed = opts.speed or 1, h = opts.h or 0, halo = opts.halo, rainbow = opts.rainbow }
+        local len = 2 * math.pi * r / n * 1.15
+        for _ = 1, n do
+            local p = cinePart(folder, Vector3.new(thick, thick, len), col)
+            p.CFrame = CFrame.new(center)
+            table.insert(rg.parts, p)
+        end
+        table.insert(rings, rg)
+    end
+    -- colonne de lumiere qui monte jusqu'au ciel
+    local function pillar(offset, w, col)
+        local cf = CFrame.new(center + offset + Vector3.new(0, 36, 0)) * CFrame.Angles(0, 0, math.rad(90))
+        local outer = cinePart(folder, Vector3.new(80, 0.1, 0.1), col, Enum.PartType.Cylinder)
+        outer.CFrame = cf
+        outer.Transparency = 0.35
+        local core = cinePart(folder, Vector3.new(80, 0.1, 0.1), WHITE, Enum.PartType.Cylinder)
+        core.CFrame = cf
+        core.Transparency = 0.15
+        local ti = TweenInfo.new(0.8, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+        TweenService:Create(outer, ti, { Size = Vector3.new(80, w, w) }):Play()
+        TweenService:Create(core, ti, { Size = Vector3.new(80, w * 0.35, w * 0.35) }):Play()
+        table.insert(pillars, { p = outer, core = core, w = w, phase = #pillars * 1.7 })
+    end
+    -- nom de la rarete en grand en haut de l'ecran, au moment ou l'oeuf eclate
+    local function showBanner()
+        local NAMES = { Epique = "ÉPIQUE", Legendaire = "LÉGENDAIRE", Mythique = "MYTHIQUE", Divin = "DIVIN", Secret = "SECRET" }
+        banner = Instance.new("TextLabel")
+        banner.Name = "MWS_HatchBanner"
+        banner.AnchorPoint = Vector2.new(0.5, 0.5)
+        banner.Position = UDim2.fromScale(0.5, 0.17)
+        banner.Size = UDim2.fromScale(0.7, (level >= 6) and 0.15 or 0.11)
+        banner.BackgroundTransparency = 1
+        banner.Font = Enum.Font.FredokaOne
+        banner.TextScaled = true
+        banner.Text = (NAMES[pet.rarity] or string.upper(tostring(pet.rarity))) .. " !"
+        banner.TextColor3 = WHITE
+        banner.TextTransparency = 1
+        banner.ZIndex = 61
+        local stroke = Instance.new("UIStroke")
+        stroke.Color = rc:Lerp(Color3.new(0, 0, 0), 0.45)
+        stroke.Thickness = 3
+        stroke.Transparency = 1
+        stroke.Parent = banner
+        local g = Instance.new("UIGradient")
+        g.Rotation = 90
+        if level >= 7 then
+            g.Color = ColorSequence.new({
+                ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 90, 110)),
+                ColorSequenceKeypoint.new(0.25, Color3.fromRGB(255, 220, 90)),
+                ColorSequenceKeypoint.new(0.5, Color3.fromRGB(110, 255, 170)),
+                ColorSequenceKeypoint.new(0.75, Color3.fromRGB(110, 170, 255)),
+                ColorSequenceKeypoint.new(1, Color3.fromRGB(240, 110, 255)),
+            })
+            rainbow = g
+        else
+            g.Color = ColorSequence.new(WHITE, rc:Lerp(WHITE, 0.2))
+        end
+        g.Parent = banner
+        local sc = Instance.new("UIScale")
+        sc.Scale = 2.4
+        sc.Parent = banner
+        banner.Parent = flashGui
+        TweenService:Create(sc, TweenInfo.new(0.5, Enum.EasingStyle.Back, Enum.EasingDirection.Out), { Scale = 1 }):Play()
+        TweenService:Create(banner, TweenInfo.new(0.25), { TextTransparency = 0 }):Play()
+        TweenService:Create(stroke, TweenInfo.new(0.25), { Transparency = 0 }):Play()
+        -- il s'efface ensuite pour laisser lire le nom du pet
+        task.delay(1.8, function()
+            if banner and banner.Parent then
+                TweenService:Create(banner, TweenInfo.new(0.4), { TextTransparency = 1 }):Play()
+                TweenService:Create(stroke, TweenInfo.new(0.4), { Transparency = 1 }):Play()
+            end
+        end)
+    end
     task.wait(0.5)
 
-    local cc
-    if tier >= 2 then
+    -- 2+ (Rare) : lumiere, etincelles et eclats qui tournent autour de l'oeuf
+    if level >= 2 then
         local pl = Instance.new("PointLight")
-        pl.Color = st.glow
-        pl.Range = 18
-        pl.Brightness = 2
+        pl.Color = rc
+        pl.Range = 14 + level * 3
+        pl.Brightness = 1.5 + level * 0.4
         pl.Parent = root
-        cineEmitter(root, SPARK_TEX, st.glow, st.accent, 0.35 * SC, 12, 2 * SC, 0.8)
-        for i = 1, (tier >= 3) and 8 or 6 do
-            local p = cinePart(folder, Vector3.new(0.25, 0.25, 0.25) * SC, (i % 2 == 0) and st.glow or st.accent)
+        cineEmitter(root, SPARK_TEX, st.glow, rc, 0.35 * SC, 8 + level * 4, 2 * SC, 0.8)
+        for i = 1, math.min(4 + level * 2, 14) do
+            local p = cinePart(folder, Vector3.new(0.25, 0.25, 0.25) * SC, (i % 2 == 0) and rc or st.glow)
             table.insert(orbit, { p = p, r = (1.5 + (i % 3) * 0.2) * SC, h = (i % 3 - 1) * 0.5 * SC, speed = 2 + (i % 2), phase = i * 0.9 })
         end
     end
-    if tier >= 3 then
+    -- 3+ (Epique) : anneau lumineux au sol
+    if level >= 3 then
+        ring(2.2 * SC, 28, rc, 0.35, { h = -2.7, speed = 0.8 })
+    end
+    -- 4+ (Legendaire) : la nuit tombe, colonne de lumiere, aureole, braises qui montent, l'oeuf s'envole
+    local cc
+    if level >= 4 then
         cc = Instance.new("ColorCorrectionEffect")
+        cc.Name = "MWS_HatchCC"
         cc.Parent = Lighting
-        local tint = (style == "lave") and Color3.fromRGB(255, 175, 150) or Color3.fromRGB(215, 180, 255)
-        TweenService:Create(cc, TweenInfo.new(0.6), { Brightness = -0.22, Contrast = 0.15, TintColor = tint }):Play()
+        TweenService:Create(cc, TweenInfo.new(0.8), { Brightness = (level >= 6) and -0.36 or -0.24, Contrast = 0.18, Saturation = 0.15, TintColor = WHITE:Lerp(rc, 0.3) }):Play()
         S.y = 1.2
+        local floor = cinePart(folder, Vector3.new(26, 0.2, 26), rc)
+        floor.Transparency = 1
+        floor.CFrame = CFrame.new(center - Vector3.new(0, 2.8, 0))
+        local embers = cineEmitter(floor, SPARK_TEX, rc:Lerp(WHITE, 0.4), rc, 0.35, (level >= 6) and 70 or 35, 5, 3)
+        embers.EmissionDirection = Enum.NormalId.Top
+        embers.SpreadAngle = Vector2.new(12, 12)
+        embers.LightEmission = 1
+        pillar(-away * 4, (level >= 5) and 3.2 or 2.4, rc)
+        ring(5.2, 40, rc:Lerp(WHITE, 0.2), 0.5, { halo = true, speed = 0.6, rainbow = level >= 7 })
+        -- la camera s'approche doucement pendant toute la montee
+        TweenService:Create(cam, TweenInfo.new(({ 0, 0, 0, 2.8, 3.9, 5.7, 6.1 })[level], Enum.EasingStyle.Sine, Enum.EasingDirection.InOut),
+            { CFrame = CFrame.lookAt(center + away * 12 + right * 2 + Vector3.new(0, 3, 0), center + Vector3.new(0, 1.6, 0)) }):Play()
+    end
+    -- 5+ (Mythique) : cercle de feu (ou d'etincelles), petits demons (oeuf de lave) ou cristaux
+    if level >= 5 then
         for i = 1, 12 do
             local a = i / 12 * math.pi * 2
-            local p = cinePart(folder, Vector3.new(0.6, 0.2, 0.6), st.glow)
+            local p = cinePart(folder, Vector3.new(0.6, 0.2, 0.6), rc)
             p.CFrame = CFrame.new(center + Vector3.new(math.cos(a), 0, math.sin(a)) * 2.0 * SC - Vector3.new(0, 2.6, 0))
             if style == "lave" then
                 cineEmitter(p, FIRE_TEX, Color3.fromRGB(255, 210, 90), Color3.fromRGB(255, 60, 10), 1.6, 18, 5, 0.7).SpreadAngle = Vector2.new(10, 10)
             else
-                cineEmitter(p, SPARK_TEX, st.glow, st.accent, 1, 14, 5, 0.7).SpreadAngle = Vector2.new(10, 10)
+                cineEmitter(p, SPARK_TEX, rc:Lerp(WHITE, 0.3), rc, 1, 14, 5, 0.7).SpreadAngle = Vector2.new(10, 10)
             end
         end
         if style == "lave" then
@@ -2160,86 +2328,146 @@ local function playEggCinematic(style, tier, center, eggIndex, pet)
             cineEmitter(root, FIRE_TEX, Color3.fromRGB(255, 200, 80), Color3.fromRGB(255, 50, 10), 1.8, 30, 5, 0.6)
         else
             for i = 1, 6 do
-                local p = cinePart(folder, Vector3.new(0.3, 0.8, 0.3) * SC, (i % 2 == 0) and st.glow or st.accent)
+                local p = cinePart(folder, Vector3.new(0.3, 0.8, 0.3) * SC, (i % 2 == 0) and rc or st.accent)
                 table.insert(orbit, { p = p, r = 2.3 * SC, h = ((i % 2) * 0.6 - 0.2) * SC, speed = -1.6, phase = i * 1.05 })
             end
         end
     end
+    -- 6+ (Divin, Secret) : deux colonnes de plus sur les cotes et une deuxieme aureole
+    if level >= 6 then
+        pillar(right * 9, 1.6, rc:Lerp(WHITE, 0.3))
+        pillar(-right * 9, 1.6, rc:Lerp(WHITE, 0.3))
+        ring(6.6, 48, st.glow:Lerp(WHITE, 0.2), 0.42, { halo = true, speed = -0.9, rainbow = level >= 7 })
+    end
 
-    if tier == 1 then
+    if level == 1 then
+        sfx("egg")
         wobble(4, 14, 0.12)
         task.wait(0.12)
+        sfx("egg")
         wobble(4, 18, 0.09)
-    elseif tier == 2 then
-        for i = 1, 8 do S.spin = S.spin + 0.35; task.wait(0.04) end
+    elseif level <= 3 then
+        for _ = 1, 8 do S.spin = S.spin + 0.35; task.wait(0.04) end
+        sfx("egg")
         wobble(6, 16, 0.1)
-        for i, p in ipairs(info.shell) do
-            if i % 3 == 0 then p.Material = Enum.Material.Neon; p.Color = st.glow end
-        end
+        crack(3, rc)
         shakeCamera(0.2, 0.5)
+        sfx("egg")
         wobble(8, 22, 0.06)
+        if level == 3 then
+            crack(2, rc)
+            shakeCamera(0.3, 0.5)
+            sfx("egg")
+            wobble(8, 26, 0.055)
+        end
     else
+        -- l'oeuf s'eleve en tournant de plus en plus vite pendant que la colonne se forme
+        sfx("charge")
+        for i = 1, 25 do S.spin = S.spin + 0.12 + i * 0.012; task.wait(0.04) end
         shakeCamera(0.15, 1.2)
         wobble(6, 12, 0.13)
-        for i, p in ipairs(info.shell) do
-            if i % 2 == 0 then p.Material = Enum.Material.Neon; p.Color = st.glow end
+        sfx("egg")
+        crack(3, rc)
+        wobble(8, 18, 0.08)
+        if level >= 5 then
+            crack(2, rc)
+            shakeCamera(0.4, 1.0)
+            sfx("egg")
+            wobble(10, 20, 0.07)
+            for _ = 1, 6 do
+                local a = math.random() * math.pi * 2
+                local bolt = cinePart(folder, Vector3.new(0.3, 0.3, 6), (math.random() < 0.5) and rc or st.accent)
+                local c = center + Vector3.new(0, S.yc, 0)
+                bolt.CFrame = CFrame.lookAt(c + Vector3.new(math.cos(a), math.sin(a) * 0.8, math.sin(a)) * 4.5, c)
+                task.delay(0.08, function() bolt:Destroy() end)
+                S.tilt = math.rad(math.random(-8, 8))
+                task.wait(0.07)
+            end
+            S.tilt = 0
         end
-        shakeCamera(0.4, 1.0)
-        wobble(10, 20, 0.07)
-        for i = 1, 6 do
-            local a = math.random() * math.pi * 2
-            local bolt = cinePart(folder, Vector3.new(0.3, 0.3, 6), st.accent)
-            bolt.CFrame = CFrame.lookAt(center + Vector3.new(0, S.y, 0) + Vector3.new(math.cos(a), math.sin(a) * 0.8, math.sin(a)) * 4.5, center + Vector3.new(0, S.y, 0))
-            task.delay(0.08, function() bolt:Destroy() end)
-            S.tilt = math.rad(math.random(-8, 8))
-            task.wait(0.07)
+        if level >= 6 then
+            -- battements de coeur : l'ecran pulse de la couleur de la rarete, de plus en plus vite
+            for i = 1, (level >= 7) and 4 or 3 do
+                screenFlash(rc, 0.72, 0.3)
+                shakeCamera(0.25 + i * 0.08, 0.25)
+                sfx("egg")
+                S.tilt = math.rad(((i % 2 == 0) and 1 or -1) * 14)
+                task.wait(0.5 - i * 0.06)
+                S.tilt = 0
+                task.wait(0.12)
+            end
         end
+        -- silence : l'oeuf devient tout lumineux et s'immobilise, juste avant d'eclater
         S.tilt = 0
+        for _, p in ipairs(info.shell) do
+            p.Material = Enum.Material.Neon
+            TweenService:Create(p, TweenInfo.new(0.35), { Color = rc:Lerp(WHITE, 0.6) }):Play()
+        end
+        task.wait((level >= 6) and 0.6 or 0.35)
     end
 
     -- explosion
-    game:GetService("SoundService"):SetAttribute("MWS_EggBurst", os.clock()) -- son de l'oeuf qui eclate
-    local big = ({ 5, 8, 13 })[tier] * SC * 0.8
-    local c = center + Vector3.new(0, S.y, 0)
+    SoundService:SetAttribute("MWS_EggBurst", os.clock()) -- son de l'oeuf qui eclate
+    if level >= 4 then sfx("boom") end
+    local big = (4 + level * 1.5) * SC * 0.8
+    local c = center + Vector3.new(0, S.yc, 0)
     for _, d in ipairs(model:GetDescendants()) do
         if d:IsA("BasePart") then d.Transparency = 1 elseif d:IsA("ParticleEmitter") then d.Enabled = false end
     end
-    local core = cinePart(folder, Vector3.new(1, 1, 1), st.glow, Enum.PartType.Ball)
+    local core = cinePart(folder, Vector3.new(1, 1, 1), (level >= 2) and rc:Lerp(WHITE, 0.3) or st.glow, Enum.PartType.Ball)
     core.CFrame = CFrame.new(c)
     TweenService:Create(core, TweenInfo.new(0.5, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { Size = Vector3.new(big, big, big), Transparency = 1 }):Play()
-    local burstCol = (style == "lave") and Color3.fromRGB(255, 120, 30) or st.glow
-    cineEmitter(core, (style == "lave") and FIRE_TEX or SPARK_TEX, st.accent, burstCol, (0.5 + tier * 0.3) * SC * 0.7, 0, (6 + tier * 4) * SC * 0.6, 0.9):Emit(25 * tier)
-    for i = 1, 6 + tier * 4 do
-        local shard = cinePart(folder, Vector3.new(0.3, 0.2, 0.4) * SC, (i % 2 == 0) and st.shell or st.glow)
+    local burstCol = (style == "lave") and Color3.fromRGB(255, 120, 30) or rc
+    cineEmitter(core, (style == "lave") and FIRE_TEX or SPARK_TEX, st.accent, burstCol, (0.5 + level * 0.15) * SC * 0.7, 0, (6 + level * 2) * SC * 0.6, 0.9):Emit(20 * level)
+    for i = 1, 6 + level * 3 do
+        local shard = cinePart(folder, Vector3.new(0.3, 0.2, 0.4) * SC, (i % 2 == 0) and st.shell or rc)
         shard.CFrame = CFrame.new(c)
         local dir = Vector3.new(math.random() - 0.5, math.random() * 0.6, math.random() - 0.5).Unit
         TweenService:Create(shard, TweenInfo.new(0.8, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-            CFrame = CFrame.new(c + dir * (2 + tier * 1.5) * SC * 0.8) * CFrame.Angles(math.random() * 6, math.random() * 6, 0),
+            CFrame = CFrame.new(c + dir * (2 + level) * SC * 0.6) * CFrame.Angles(math.random() * 6, math.random() * 6, 0),
             Transparency = 1,
         }):Play()
     end
     S.boom = os.clock()
-    if tier >= 3 then
-        local wave = cinePart(folder, Vector3.new(0.3, 1, 1), st.accent, Enum.PartType.Cylinder)
+    if level >= 3 then
+        local wave = cinePart(folder, Vector3.new(0.3, 1, 1), rc, Enum.PartType.Cylinder)
         wave.CFrame = CFrame.new(center - Vector3.new(0, 2, 0)) * CFrame.Angles(0, 0, math.rad(90))
-        TweenService:Create(wave, TweenInfo.new(0.7), { Size = Vector3.new(0.3, 40, 40), Transparency = 1 }):Play()
+        local w = 10 + level * 5
+        TweenService:Create(wave, TweenInfo.new(0.7), { Size = Vector3.new(0.3, w, w), Transparency = 1 }):Play()
+        showBanner()
+    end
+    if level >= 4 then
         for _, imp in ipairs(imps) do
             for _, p in ipairs(imp.obj.parts) do TweenService:Create(p, TweenInfo.new(0.6), { Transparency = 1 }):Play() end
         end
-        screenFlash(Color3.new(1, 1, 1), 0.1, 0.6)
-        shakeCamera(1, 0.7)
+        -- les colonnes s'elargissent d'un coup puis s'effacent
+        for _, pl in ipairs(pillars) do
+            TweenService:Create(pl.p, TweenInfo.new(1.4), { Size = Vector3.new(80, pl.w * 2.4, pl.w * 2.4), Transparency = 1 }):Play()
+            TweenService:Create(pl.core, TweenInfo.new(1.4), { Size = Vector3.new(80, pl.w, pl.w), Transparency = 1 }):Play()
+        end
+        screenFlash(WHITE, 0.05, 0.5 + (level - 4) * 0.2)
+        shakeCamera(0.5 + level * 0.1, 0.5 + level * 0.08)
+        TweenService:Create(cc, TweenInfo.new(1.2), { Brightness = -0.12, Contrast = 0.1 }):Play()
     else
-        screenFlash(Color3.new(1, 1, 1), (tier == 2) and 0.45 or 0.7, 0.35)
-        if tier == 2 then shakeCamera(0.35, 0.35) end
+        screenFlash(WHITE, (level == 1) and 0.7 or 0.45, 0.35)
+        if level >= 2 then shakeCamera(0.35, 0.35) end
     end
     task.wait(0.35)
-    if cc then
-        TweenService:Create(cc, TweenInfo.new(0.6), { Brightness = 0, Contrast = 0, TintColor = Color3.new(1, 1, 1) }):Play()
-        task.delay(0.7, function() cc:Destroy() end)
-    end
     -- le pet apparait (l'animation est finie : c'est seulement maintenant qu'on voit ce qu'on a eu)
-    if pet then revealPet(folder, center, away, pet) end
+    S.reveal = os.clock()
+    -- plus le pet est rare, plus il apparait grand et longtemps
+    if pet then revealPet(folder, center, away, pet, (level >= 6) and 7.5 or ((level >= 4) and 6 or nil), (level >= 6) and 3.4 or ((level >= 4) and 2.9 or 2.3)) end
     conn:Disconnect()
+    if banner then
+        local b = banner
+        TweenService:Create(b, TweenInfo.new(0.3), { TextTransparency = 1 }):Play()
+        TweenService:Create(b.UIStroke, TweenInfo.new(0.3), { Transparency = 1 }):Play()
+        task.delay(0.35, function() b:Destroy() end)
+    end
+    if cc then
+        TweenService:Create(cc, TweenInfo.new(0.5), { Brightness = 0, Contrast = 0, Saturation = 0, TintColor = WHITE }):Play()
+        task.delay(0.6, function() cc:Destroy() end)
+    end
     folder:Destroy()
     hideStandEgg(eggIndex, false)
     cam.CameraType = Enum.CameraType.Custom
@@ -2385,8 +2613,7 @@ BuyEgg.OnClientEvent:Connect(function(data)
             return
         end
         local style = data.fusion and "fusion" or (data.style or "base")
-        local tier = EGG_TIER[style] or 1
-        if pet.rarity == "Secret" or pet.rarity == "Divin" then tier = 3 end
+        local tier = HATCH_LEVEL[pet.rarity] or 1 -- l'animation depend de la rarete du pet obtenu
         local center = data.eggPos
         if not center then
             -- fusion (pas de socle) : l'oeuf apparait devant le joueur
@@ -2401,6 +2628,12 @@ BuyEgg.OnClientEvent:Connect(function(data)
             warn("[MWS] Animation d'oeuf : " .. tostring(err))
             workspace.CurrentCamera.CameraType = Enum.CameraType.Custom
             hideStandEgg(data.eggIndex, false)
+            -- on enleve ce que l'animation a laisse (assombrissement, effets, nom de rarete)
+            for _, holder in ipairs({ Lighting, workspace, flashGui }) do
+                for _, d in ipairs(holder:GetChildren()) do
+                    if d.Name:match("^MWS_Hatch") then d:Destroy() end
+                end
+            end
         end
     else
         hatchFrame.Visible = true

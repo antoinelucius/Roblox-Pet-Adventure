@@ -3359,9 +3359,9 @@ local function createEggsForWorld(w)
 			end
 			s.coins = s.coins - def.price
 			local newPet = rollPet(s, def.pool)
-			local strong = def.style == "lave" or def.style == "primordial" or newPet.rarity == "Divin" or newPet.rarity == "Secret"
-			local medium = def.style == "mythique" or def.style == "celeste"
-			s.hatchBusyUntil = os.clock() + (strong and 7.5 or (medium and 5.5 or 4.3))
+			-- duree de l'animation chez le joueur : plus le pet est rare, plus elle est longue
+			s.hatchBusyUntil = os.clock() + (({ Commun = 4.5, Rare = 5, Epique = 5.6, Legendaire = 7.1,
+				Mythique = 8.5, Divin = 10.8, Secret = 11 })[newPet.rarity] or 4.5)
 			table.insert(s.pets, newPet)
 			if _G.MWS_Track then
 				_G.MWS_Track(player, "pet", newPet.name)
