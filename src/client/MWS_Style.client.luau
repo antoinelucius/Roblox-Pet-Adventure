@@ -197,10 +197,13 @@ end
 
 local blur = Lighting:FindFirstChild("MWS_MenuBlur") or new("BlurEffect", { Name = "MWS_MenuBlur", Size = 0 }, Lighting)
 local panels = {}
+-- flou seulement si un vrai menu est ouvert et affiche (pas l'argent, le fondu de changement
+-- de monde ni les ecrans plein ecran, qui laissaient le flou bloque)
 local function updateBlur()
 	local open = false
 	for frame in pairs(panels) do
-		if frame.Parent and frame.Visible then open = true break end
+		local screen = frame:FindFirstAncestorWhichIsA("ScreenGui")
+		if frame.Parent and frame.Visible and screen and screen.Enabled and isPanel(frame) then open = true break end
 	end
 	tween(blur, 0.25, { Size = open and 10 or 0 })
 end
@@ -210,7 +213,7 @@ local function stylePanel(frame)
 	panels[frame] = false
 	local wasVisible = frame.Visible
 	frame:GetPropertyChangedSignal("Visible"):Connect(function()
-		if not isPanel(frame) then return end
+		if not isPanel(frame) then updateBlur() return end
 		if not panels[frame] then
 			-- habillage au premier affichage : contour noir epais (sauf si le menu a deja le sien)
 			panels[frame] = true
@@ -242,6 +245,7 @@ end
 
 for _, child in ipairs(gui:GetChildren()) do stylePanel(child) end
 gui.ChildAdded:Connect(stylePanel)
+gui:GetPropertyChangedSignal("Enabled"):Connect(updateBlur)   -- interface cachee (animations) : pas de flou
 local settingsGui = playerGui:WaitForChild("MWS_Settings", 10)
 local settingsPanel = settingsGui and settingsGui:FindFirstChildOfClass("Frame")
 if settingsPanel then stylePanel(settingsPanel) end
