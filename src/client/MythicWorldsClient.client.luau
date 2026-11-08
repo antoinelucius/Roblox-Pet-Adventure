@@ -1904,6 +1904,10 @@ end)
 --   Epique : + anneau au sol, nom de la rarete. Legendaire : la nuit tombe, colonne de lumiere,
 --   aureole, braises, l'oeuf s'envole. Mythique : + cercle de feu, demons ou cristaux, eclairs.
 --   Divin / Secret : 3 colonnes, double aureole (arc-en-ciel pour Secret), battements de coeur.
+-- Chaque oeuf a en plus son animation a lui, dans le theme de son monde (MWS_EggThemes).
+-- tout ce qui sert aux animations d'oeuf reste dans ce bloc : le script est pres de la limite
+-- de 200 variables locales de Luau, et rien d'ici n'est utilise plus bas
+do
 local EggModels = require(ReplicatedStorage:WaitForChild("MWS_EggModels"))
 local Lighting = game:GetService("Lighting")
 local HATCH_LEVEL = { Commun = 1, Rare = 2, Epique = 3, Legendaire = 4, Mythique = 5, Divin = 6, Secret = 7 }
@@ -2132,6 +2136,15 @@ local function playEggCinematic(style, level, center, eggIndex, pet)
     local S = { y = 0, yc = 0, tilt = 0, spin = 0, boom = nil, reveal = nil, rise = 0 }
     local orbit, imps, rings, pillars = {}, {}, {}, {}
     local banner, rainbow
+    -- animation propre a cet oeuf, dans le theme de son monde (voir MWS_EggThemes)
+    local theme = require(ReplicatedStorage:WaitForChild("MWS_EggThemes"))[style] or {}
+    local ctx = { folder = folder, center = center, c = center, away = away, right = right, root = root, SC = SC,
+        level = level, st = st, S = S, imps = imps, makeImp = makeImp, updaters = {} }
+    local baseSfx = sfx
+    sfx = function(name)
+        baseSfx(name)
+        if name == "egg" and theme.beat then theme.beat(ctx) end   -- a chaque craquement
+    end
     local t0 = os.clock()
     local conn = RunService.RenderStepped:Connect(function(dt)
         local t = os.clock() - t0
@@ -2141,7 +2154,13 @@ local function playEggCinematic(style, level, center, eggIndex, pet)
             S.rise = 0.4 * (1 - (1 - e) * (1 - e))
         end
         local c = center + Vector3.new(0, S.yc, 0)
-        root.CFrame = CFrame.new(c) * CFrame.fromAxisAngle(away, S.tilt) * CFrame.Angles(0, S.spin, 0)
+        -- mouvement propre a l'oeuf (sautille, tourne comme une piece, flotte, tremble...)
+        local mdy, mspin, mtilt = 0, 0, 0
+        if theme.motion and not S.boom then mdy, mspin, mtilt = theme.motion(ctx, t, dt) end
+        c = c + Vector3.new(0, mdy, 0)
+        ctx.c = c
+        root.CFrame = CFrame.new(c) * CFrame.fromAxisAngle(away, S.tilt + mtilt) * CFrame.Angles(0, S.spin + mspin, 0)
+        for _, update in ipairs(ctx.updaters) do update(t, dt) end
         local spread = S.boom and (os.clock() - S.boom) * 30 or 0
         for i, o in ipairs(orbit) do
             local a = t * o.speed + o.phase
@@ -2309,30 +2328,8 @@ local function playEggCinematic(style, level, center, eggIndex, pet)
         TweenService:Create(cam, TweenInfo.new(({ 0, 0, 0, 2.8, 3.9, 5.7, 6.1 })[level], Enum.EasingStyle.Sine, Enum.EasingDirection.InOut),
             { CFrame = CFrame.lookAt(center + away * 12 + right * 2 + Vector3.new(0, 3, 0), center + Vector3.new(0, 1.6, 0)) }):Play()
     end
-    -- 5+ (Mythique) : cercle de feu (ou d'etincelles), petits demons (oeuf de lave) ou cristaux
-    if level >= 5 then
-        for i = 1, 12 do
-            local a = i / 12 * math.pi * 2
-            local p = cinePart(folder, Vector3.new(0.6, 0.2, 0.6), rc)
-            p.CFrame = CFrame.new(center + Vector3.new(math.cos(a), 0, math.sin(a)) * 2.0 * SC - Vector3.new(0, 2.6, 0))
-            if style == "lave" then
-                cineEmitter(p, FIRE_TEX, Color3.fromRGB(255, 210, 90), Color3.fromRGB(255, 60, 10), 1.6, 18, 5, 0.7).SpreadAngle = Vector2.new(10, 10)
-            else
-                cineEmitter(p, SPARK_TEX, rc:Lerp(WHITE, 0.3), rc, 1, 14, 5, 0.7).SpreadAngle = Vector2.new(10, 10)
-            end
-        end
-        if style == "lave" then
-            for i = 1, 5 do
-                table.insert(imps, { obj = makeImp(folder, 1.4), r = 2.1 * SC, h = (0.2 + (i % 2) * 0.5) * SC })
-            end
-            cineEmitter(root, FIRE_TEX, Color3.fromRGB(255, 200, 80), Color3.fromRGB(255, 50, 10), 1.8, 30, 5, 0.6)
-        else
-            for i = 1, 6 do
-                local p = cinePart(folder, Vector3.new(0.3, 0.8, 0.3) * SC, (i % 2 == 0) and rc or st.accent)
-                table.insert(orbit, { p = p, r = 2.3 * SC, h = ((i % 2) * 0.6 - 0.2) * SC, speed = -1.6, phase = i * 1.05 })
-            end
-        end
-    end
+    -- le theme de l'oeuf (prairie, tresor, orage, eruption, constellation, trou noir) ; il grandit avec la rarete
+    if theme.setup then theme.setup(ctx) end
     -- 6+ (Divin, Secret) : deux colonnes de plus sur les cotes et une deuxieme aureole
     if level >= 6 then
         pillar(right * 9, 1.6, rc:Lerp(WHITE, 0.3))
@@ -2410,7 +2407,7 @@ local function playEggCinematic(style, level, center, eggIndex, pet)
     SoundService:SetAttribute("MWS_EggBurst", os.clock()) -- son de l'oeuf qui eclate
     if level >= 4 then sfx("boom") end
     local big = (4 + level * 1.5) * SC * 0.8
-    local c = center + Vector3.new(0, S.yc, 0)
+    local c = ctx.c
     for _, d in ipairs(model:GetDescendants()) do
         if d:IsA("BasePart") then d.Transparency = 1 elseif d:IsA("ParticleEmitter") then d.Enabled = false end
     end
@@ -2429,6 +2426,7 @@ local function playEggCinematic(style, level, center, eggIndex, pet)
         }):Play()
     end
     S.boom = os.clock()
+    if theme.burst then theme.burst(ctx, c) end   -- explosion propre a l'oeuf (fleurs, pieces, lave, etoiles...)
     if level >= 3 then
         local wave = cinePart(folder, Vector3.new(0.3, 1, 1), rc, Enum.PartType.Cylinder)
         wave.CFrame = CFrame.new(center - Vector3.new(0, 2, 0)) * CFrame.Angles(0, 0, math.rad(90))
@@ -2645,6 +2643,7 @@ BuyEgg.OnClientEvent:Connect(function(data)
         hatchFrame.Visible = false
     end
 end)
+end -- fin du bloc des animations d'oeuf
 
 -- ============================================================
 -- BOUTIQUE ROBUX + MONDES + RACCOURCIS (boutons colonne de droite)

@@ -147,71 +147,73 @@ local PETS = {
 -- ============================================================
 
 local EGGS = {
+	-- prix : environ 2 a 4 minutes de revenu avec les pets qu'on a en arrivant a cet oeuf.
+	-- chances : les pets les plus forts de chaque oeuf restent rares (ils ne doivent pas tomber a chaque achat)
 	{
 		name = "Oeuf de base", price = 100, world = 1, style = "base",
 		color = {180, 120, 255}, standColor = Color3.fromRGB(90, 120, 255),
 		pool = {
-			{ pet = "Poulet",    chance = 39 },
-			{ pet = "Chien",  chance = 28 },
-			{ pet = "Renard",    chance = 20 },
-			{ pet = "Ours", chance = 10 },
-			{ pet = "Cerf",   chance = 2 },
-			{ pet = "Licorne",     chance = 1 }
+			{ pet = "Poulet",    chance = 40 },
+			{ pet = "Chien",  chance = 30 },
+			{ pet = "Renard",    chance = 18 },
+			{ pet = "Ours", chance = 9 },
+			{ pet = "Cerf",   chance = 2.5 },
+			{ pet = "Licorne",     chance = 0.5 }
 		}
 	},
 	{
-		name = "Oeuf dore", price = 1000, world = 1, style = "dore",
+		name = "Oeuf dore", price = 2500, world = 1, style = "dore",
 		color = {255, 200, 50}, standColor = Color3.fromRGB(200, 160, 40),
 		pool = {
-			{ pet = "Tortue",  chance = 28 },
-			{ pet = "Hibou des neiges",     chance = 25 },
-			{ pet = "Panda roux", chance = 22 },
-			{ pet = "Pterodactyle",    chance = 18 },
-			{ pet = "Dragon de glace",      chance = 7 }
+			{ pet = "Tortue",  chance = 40 },
+			{ pet = "Hibou des neiges",     chance = 28 },
+			{ pet = "Panda roux", chance = 20 },
+			{ pet = "Pterodactyle",    chance = 10 },
+			{ pet = "Dragon de glace",      chance = 2 }
 		}
 	},
 	{
-		name = "Oeuf mythique", price = 5000, world = 2, style = "mythique",
+		name = "Oeuf mythique", price = 40000, world = 2, style = "mythique",
 		color = {255, 50, 200}, standColor = Color3.fromRGB(180, 40, 140),
 		pool = {
-			{ pet = "Tigre",    chance = 28 },
-			{ pet = "Dragon de lave",   chance = 25 },
-			{ pet = "Gorille",     chance = 22 },
-			{ pet = "Mammouth", chance = 18 },
-			{ pet = "Phenix",   chance = 7 }
+			{ pet = "Tigre",    chance = 42 },
+			{ pet = "Dragon de lave",   chance = 30 },
+			{ pet = "Gorille",     chance = 18 },
+			{ pet = "Mammouth", chance = 8 },
+			{ pet = "Phenix",   chance = 2 }
 		}
 	},
 	{
-		name = "Oeuf de lave", price = 20000, world = 2, style = "lave",
+		name = "Oeuf de lave", price = 200000, world = 2, style = "lave",
 		color = {255, 100, 20}, standColor = Color3.fromRGB(120, 40, 20),
 		pool = {
-			{ pet = "Crocodile", chance = 35 },
-			{ pet = "Taureau de feu",  chance = 27 },
-			{ pet = "Salamandre", chance = 20 },
-			{ pet = "Pegase",  chance = 13 },
-			{ pet = "Dragon des ombres",   chance = 5 }
+			{ pet = "Crocodile", chance = 42 },
+			{ pet = "Taureau de feu",  chance = 30 },
+			{ pet = "Salamandre", chance = 18 },
+			{ pet = "Pegase",  chance = 8 },
+			{ pet = "Dragon des ombres",   chance = 2 }
 		}
 	},
 	{
-		name = "Oeuf celeste", price = 75000, world = 3, style = "celeste",
+		name = "Oeuf celeste", price = 1500000, world = 3, style = "celeste",
 		color = {120, 160, 255}, standColor = Color3.fromRGB(60, 50, 140),
 		pool = {
-			{ pet = "Yeti", chance = 33 },
-			{ pet = "Kitsune",        chance = 27 },
-			{ pet = "Roi serpent",    chance = 20 },
-			{ pet = "Dragon cosmique",     chance = 14 },
-			{ pet = "Dragon du vide",       chance = 6 }
+			{ pet = "Yeti", chance = 42 },
+			{ pet = "Kitsune",        chance = 30 },
+			{ pet = "Roi serpent",    chance = 18 },
+			{ pet = "Dragon cosmique",     chance = 8 },
+			{ pet = "Dragon du vide",       chance = 2 }
 		}
 	},
 	{
-		name = "Oeuf primordial", price = 400000, world = 3, style = "primordial",
+		name = "Oeuf primordial", price = 12000000, world = 3, style = "primordial",
 		color = {255, 80, 255}, standColor = Color3.fromRGB(70, 20, 110),
 		pool = {
-			{ pet = "Tyrannosaure",    chance = 30 },
-			{ pet = "Tigre sabre", chance = 28 },
-			{ pet = "Cerbere",    chance = 22 },
-			{ pet = "Dragon lunaire",     chance = 15 },
-			{ pet = "Dragon primordial",   chance = 5 }
+			{ pet = "Tyrannosaure",    chance = 60 },
+			{ pet = "Tigre sabre", chance = 26 },
+			{ pet = "Cerbere",    chance = 10 },
+			{ pet = "Dragon lunaire",     chance = 3.5 },
+			{ pet = "Dragon primordial",   chance = 0.5 }
 		}
 	}
 }
