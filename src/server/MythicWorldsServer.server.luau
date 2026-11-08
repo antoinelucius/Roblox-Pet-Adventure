@@ -14,6 +14,7 @@ local DataStoreService = game:GetService("DataStoreService")
 local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
 local Debris = game:GetService("Debris")
+_G.MWS_Mastery = require(ReplicatedStorage:WaitForChild("MWS_Mastery"))   -- maitrises (regles partagees avec le client)
 
 local datastoreAvailable = pcall(function()
 	_G.MWS_Store = DataStoreService:GetDataStore("MythicWorlds_v3")
@@ -1479,9 +1480,14 @@ local function getIncome(player)
 	local total = 0
 	for _, pet in ipairs(getEquippedPets(s)) do
 		local info = PETS[pet.name]
-		if info then total = total + (pet.income or info.income) * petLvlMult(pet) end
+		if info then
+			-- maitrise Fusion : bonus de revenu des pets fusionnes
+			local fused = ((pet.tier or 0) > 0) and (1 + _G.MWS_Mastery.bonus(s, "fusion")) or 1
+			total = total + (pet.income or info.income) * petLvlMult(pet) * fused
+		end
 	end
-	local multiplier = (1 + (s.rebirthLevel or 0) * 0.5) * (s.coinMult or 1)
+	-- maitrise Richesse : bonus de coins par seconde
+	local multiplier = (1 + (s.rebirthLevel or 0) * 0.5) * (s.coinMult or 1) * (1 + _G.MWS_Mastery.bonus(s, "richesse"))
 	return math.floor(total * multiplier)
 end
 
@@ -1631,6 +1637,7 @@ function Saves.snapshot(s)
 		daily = Saves.deepCopy(s.daily), quests = Saves.deepCopy(s.quests), weekly = Saves.deepCopy(s.weekly),
 		auraColor = s.auraColor, trail = s.trail, potions = Saves.deepCopy(s.potions or {}),
 		settings = Saves.deepCopy(s.settings or {}),
+		mastery = Saves.deepCopy(s.mastery or {}),
 		lastSeen = os.time(),
 	}
 end
@@ -1686,6 +1693,7 @@ local function loadPlayer(player)
 		end
 	end
 	s.potions = cleanPotions
+	_G.MWS_Mastery.clean(s)   -- maitrises : XP verifiee
 	local cleanPets, ownedIds, maxId = {}, {}, 0
 	for _, pet in ipairs(s.pets) do
 		if type(pet) == "table" and PETS[pet.name] and type(pet.id) == "number" then
@@ -1821,6 +1829,7 @@ end
 local function rollPet(s, eggPool)
 	-- Potion de chance : les animaux rares (chance <= 10 %) sont plus probables
 	local luck = ((s.luckUntil or 0) > os.time()) and (s.luckMult or 1) or 1
+	luck = luck * (1 + _G.MWS_Mastery.bonus(s, "eclosion"))   -- maitrise Eclosion
 	local weights, total = {}, 0
 	for i, entry in ipairs(eggPool) do
 		local w = entry.chance
@@ -3050,7 +3059,7 @@ local function collectCrystal(info, player, byPet)
 		local pi = PETS[pet.name]
 		if pi then petBonus = petBonus + pi.multiplier * 0.05 end
 	end
-	local reward = math.floor(info.reward * mult * petBonus * (s.coinMult or 1))
+	local reward = math.floor(info.reward * mult * petBonus * (s.coinMult or 1) * (1 + _G.MWS_Mastery.bonus(s, "cristaux")))
 	s.coins = s.coins + reward
 	sendState(player)
 	if _G.MWS_Track then _G.MWS_Track(player, "crystal") end
@@ -4882,6 +4891,7 @@ startBattle = function(player, npcIndex)
 	for _, pet in ipairs(getEquippedPets(s)) do
 		local info = PETS[pet.name]
 		local mult = (pet.multiplier or (info and info.multiplier) or 1) * (1 + 0.05 * math.clamp(math.floor(tonumber(pet.lvl) or 0), 0, PET_MAX_LVL))
+			* (1 + _G.MWS_Mastery.bonus(s, "combat"))   -- maitrise Combat
 		table.insert(playerPets, {
 			name = pet.name, color = pet.color, rarity = pet.rarity, size = pet.size, mutation = pet.mutation,
 			hp = mult * 100, maxHp = mult * 100, attack = mult * 20, charge = 0, maxCharge = 100
@@ -6458,6 +6468,7 @@ do
 		local s = states[player.UserId]
 		if not s then return end
 		ensure(s)
+		if _G.MWS_MasteryXP then _G.MWS_MasteryXP(player, event) end   -- XP de maitrise
 		if event == "pet" then
 			markDex(player, s, arg)
 			return
@@ -6906,7 +6917,7 @@ do
 							reason = "Monde non debloque : entrainement arrete"
 							break
 						end
-						local gain = TRAIN_XP[worldN]
+						local gain = math.floor(TRAIN_XP[worldN] * (1 + _G.MWS_Mastery.bonus(s, "entrainement")))   -- maitrise Entrainement
 						local levelUps = {}
 						for _, pet in ipairs(pets) do
 							if table.find(s.pets, pet) then
@@ -6976,6 +6987,46 @@ do
 	print("[MWS] Entrainement : " .. count .. " sacs de frappe actifs.")
 end
 -- TRAINING_END
+
+-- ============================================================
+-- MAITRISES : XP gagnee en jouant, niveaux et avantages (regles dans MWS_Mastery)
+-- ============================================================
+do
+	local Mastery = _G.MWS_Mastery
+	local GOLD = Color3.fromRGB(255, 215, 90)
+	-- XP de maitrise pour une action suivie (train, battle, egg, crystal, fusion, time)
+	_G.MWS_MasteryXP = function(player, event)
+		local ev = Mastery.EVENTS[event]
+		local s = states[player.UserId]
+		if not ev or not s then return end
+		if type(s.mastery) ~= "table" then s.mastery = {} end
+		local key, amount = ev[1], ev[2]
+		local m = Mastery.BY_KEY[key]
+		local before = Mastery.levelOf(s.mastery[key])
+		s.mastery[key] = math.min((s.mastery[key] or 0) + amount, Mastery.MAX_XP)
+		local after = Mastery.levelOf(s.mastery[key])
+		if after > before then
+			notify(player, "\u{2B50} Maîtrise " .. m.name .. " : niveau " .. after .. " !", GOLD)
+			local n = Mastery.perksAt(after)
+			if n > Mastery.perksAt(before) then
+				task.delay(1.5, function()
+					if player.Parent then
+						notify(player, "Nouvel avantage : " .. Mastery.perkName(m, n) .. " (" .. Mastery.perkText(m, n) .. ")", Color3.fromRGB(120, 255, 140))
+					end
+				end)
+			end
+		end
+	end
+	-- maitrise Richesse : un peu d'XP toutes les 10 secondes de jeu
+	task.spawn(function()
+		while true do
+			task.wait(10)
+			for _, player in ipairs(Players:GetPlayers()) do
+				if states[player.UserId] then _G.MWS_MasteryXP(player, "time") end
+			end
+		end
+	end)
+end
 
 print("[MWS] Mythic Worlds Simulator v5 initialise : 3 mondes, 31 pets, 6 oeufs, 10 monstres.")
 
