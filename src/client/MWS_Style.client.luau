@@ -170,10 +170,12 @@ for _, child in ipairs(gui:GetChildren()) do
 		end
 	end
 end
--- la roue dentee des parametres arrive un peu apres le menu
+-- la roue dentee des parametres et le bouton Maitrise (MWS_Mastery) arrivent un peu apres le menu
 local function styleSettings(item)
 	if item:IsA("TextButton") and item.Name == "SettingsButton" then
 		item.BackgroundColor3 = Color3.fromRGB(150, 155, 170)
+		styleButton(item)
+	elseif item:IsA("TextButton") and item.Name == "MWS_MasteryButton" then
 		styleButton(item)
 	end
 end
