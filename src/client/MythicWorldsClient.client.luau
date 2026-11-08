@@ -1601,7 +1601,7 @@ local function updateBattleUI(data)
         npcHpText.Text = enemyPet.hp .. " / " .. enemyPet.maxHp .. " HP"
         npcPetCount.Text = enemyPet.isBoss and "BOSS" or ("Pet " .. data.npcCurrent .. " / " .. #data.npcPets)
 
-        -- jauge de chaleur du Golem : se remplit a chaque attaque, eruption a 100 %, puis refroidit
+        -- jauge de l'attaque speciale du boss (chaleur, bouclier, charge...) : texte et couleur du serveur
         local gauge = npcPetFrame:FindFirstChild("HeatGauge")
         if not gauge then
             gauge = Instance.new("Frame")
@@ -1627,19 +1627,12 @@ local function updateBattleUI(data)
             label.ZIndex = 25
             label.Parent = gauge
         end
-        local heat = enemyPet.heat
-        gauge.Visible = heat ~= nil
-        if heat then
-            local fill, label = gauge.Fill, gauge.Label
-            if (enemyPet.cooled or 0) > 0 then
-                fill.Size = UDim2.fromScale(enemyPet.cooled / 2, 1)
-                fill.BackgroundColor3 = Color3.fromRGB(90, 170, 255)
-                label.Text = "\u{2744} REFROIDI : +50 % DÉGÂTS"
-            else
-                fill.Size = UDim2.fromScale(heat / 100, 1)
-                fill.BackgroundColor3 = heat >= 100 and Color3.fromRGB(255, 40, 20) or Color3.fromRGB(255, math.floor(170 - heat), 30)
-                label.Text = heat >= 100 and "\u{1F30B} ÉRUPTION !" or ("\u{1F525} CHALEUR " .. heat .. " %")
-            end
+        local mech = data.mechGauge
+        gauge.Visible = mech ~= nil
+        if mech then
+            gauge.Fill.Size = UDim2.fromScale(mech.fill, 1)
+            gauge.Fill.BackgroundColor3 = Color3.fromRGB(mech.color[1], mech.color[2], mech.color[3])
+            gauge.Label.Text = mech.text
         end
     end
 
@@ -1663,8 +1656,8 @@ local function updateBattleUI(data)
     end
 
     guardBtn.Visible = data.active == true and data.turn == "player"
-    -- eruption imminente : le bouton Proteger devient rouge
-    local danger = enemyPet ~= nil and enemyPet.heat ~= nil and enemyPet.heat >= 100 and (enemyPet.cooled or 0) == 0
+    -- coup dangereux annonce par le boss : le bouton Proteger devient rouge
+    local danger = data.danger == true
     guardBtn.BackgroundColor3 = danger and Color3.fromRGB(220, 50, 40) or Color3.fromRGB(50, 110, 200)
     guardBtn.Text = danger and "\u{1F6E1} PROTÈGE-TOI !" or "\u{1F6E1} Protéger"
     battleStatus.Text = data.status or ""

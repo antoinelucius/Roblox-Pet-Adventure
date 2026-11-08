@@ -290,15 +290,15 @@ local NPC_TRAINERS = {
 do
 	local style = {
 		{ 12, false, "Hé hé ! Tu es sûr de vouloir m'affronter, petit ?", "Tes pets vont finir dans ma marmite !" },
-		{ 16, false, "Tu oses marcher sur mes terres ? Tu veux vraiment te battre ?", "Alors prépare-toi à être écrasé !" },
+		{ 16, false, "Tu oses marcher sur mes terres ? Tu veux vraiment te battre ?", "Alors prépare-toi à être écrasé !", "charge" },
 		{ 21, false, "Cette armure est vide... mais elle n'a jamais perdu. Es-tu prêt ?", "En garde, voyageur !", "shield" },
-		{ 26, false, "La forêt t'observe depuis ton arrivée. Oseras-tu me défier ?", "Mes racines vont t'engloutir !" },
+		{ 26, false, "La forêt t'observe depuis ton arrivée. Oseras-tu me défier ?", "Mes racines vont t'engloutir !", "roots" },
 		{ 30, false, "Mon corps brûle depuis la naissance du volcan. Tu veux vraiment t'y frotter ?", "Je vais te fondre comme de la cire !", "heat" },
-		{ 34, true, "Tous ceux qui m'ont défié reposent ici. Tu veux les rejoindre ?", "Ta place est déjà creusée." },
-		{ 38, true, "Un mortel devant le Prince des Cendres ? Tu es sûr de ton choix ?", "Brûle, et que tes cendres me servent de trône !" },
-		{ 42, false, "Mes queues ont balayé des armées entières. Es-tu sûr de toi ?", "Attrape-moi, si tu le peux !" },
-		{ 46, false, "Ma lame n'est jamais sortie sans goûter la victoire. Tu insistes ?", "Alors danse avec les pétales !" },
-		{ 50, false, "Je suis la fin de toute chose. Tu veux vraiment défier le Néant ?", "Même les étoiles se sont inclinées. À ton tour !" },
+		{ 34, true, "Tous ceux qui m'ont défié reposent ici. Tu veux les rejoindre ?", "Ta place est déjà creusée.", "phase" },
+		{ 38, true, "Un mortel devant le Prince des Cendres ? Tu es sûr de ton choix ?", "Brûle, et que tes cendres me servent de trône !", "burn" },
+		{ 42, false, "Mes queues ont balayé des armées entières. Es-tu sûr de toi ?", "Attrape-moi, si tu le peux !", "illusion" },
+		{ 46, false, "Ma lame n'est jamais sortie sans goûter la victoire. Tu insistes ?", "Alors danse avec les pétales !", "counter" },
+		{ 50, false, "Je suis la fin de toute chose. Tu veux vraiment défier le Néant ?", "Même les étoiles se sont inclinées. À ton tour !", "eclipse" },
 	}
 	for i, st in ipairs(style) do
 		local npc = NPC_TRAINERS[i]
@@ -4184,10 +4184,247 @@ function BossFight.giveTrail(player, s, key)
 	end)
 end
 
+-- Attaque speciale de chaque boss : un compteur annonce le coup, une alerte rouge previent le
+-- tour dangereux et une reponse existe toujours (se proteger, attaque speciale, changer de pet)
+--   charge   Orque     : tous les 3 coups, une charge x3 ; se proteger le laisse sonne
+--   roots    Sylvain   : ses racines le soignent ; une attaque speciale les coupe 3 tours
+--   phase    Spectre   : un tour sur deux il est intangible ; seule une attaque speciale le touche
+--   burn     Ignareth  : une flamme maudite fait bruler le pet ; se proteger la bloque, changer l'eteint
+--   illusion Renard    : il se divise en trois ; les attaques normales peuvent viser une illusion
+--   counter  Oni       : posture de contre ; attaquer declenche une riposte, se proteger le sonne
+--   eclipse  Neant     : s'eveille a 50 % de PV, puis prepare des eclipses qui vident la charge
+function BossFight.danger(b)
+	local e = b.npcPets[b.npcCurrent]
+	if not e or not b.active or not e.isBoss then return false end
+	return (e.heat ~= nil and e.heat >= 100 and (e.cooled or 0) == 0)
+		or e.winding == true or e.flameNext == true or e.stance == true or e.eclipseNext == true
+end
+
+-- jauge sous la barre de vie du boss : texte, remplissage (0 a 1), couleur
+function BossFight.gauge(b)
+	local e = b.npcPets[b.npcCurrent]
+	if not e or not e.isBoss or not e.mech then return nil end
+	local function out(text, fill, r, g, bl)
+		return { text = text, fill = math.clamp(fill, 0, 1), color = { r, g, bl } }
+	end
+	local left = 3 - ((e.t or 0) % 3)
+	local m = e.mech
+	if m == "heat" then
+		if (e.cooled or 0) > 0 then return out("\u{2744} REFROIDI : +50 % DÉGÂTS", e.cooled / 2, 90, 170, 255) end
+		if e.heat >= 100 then return out("\u{1F30B} ÉRUPTION ! Protège-toi", 1, 255, 40, 20) end
+		return out("\u{1F525} CHALEUR " .. e.heat .. " %", e.heat / 100, 255, math.floor(170 - e.heat), 30)
+	elseif m == "shield" then
+		if e.shield then return out("\u{1F6E1} BOUCLIER : attaque spéciale !", 1, 90, 160, 255) end
+		local n = 3 - ((e.turns or 0) % 3)
+		return out("\u{1F6E1} Bouclier dans " .. n .. " coup(s)", 1 - n / 3, 120, 140, 180)
+	elseif m == "charge" then
+		if e.winding then return out("\u{1F417} CHARGE ! Protège-toi", 1, 255, 50, 40) end
+		return out("\u{1F417} Charge dans " .. left .. " coup(s)", 1 - left / 3, 230, 140, 60)
+	elseif m == "roots" then
+		if (e.rootsCut or 0) > 0 then return out("\u{2702} Racines coupées : " .. e.rootsCut .. " tour(s)", e.rootsCut / 3, 150, 100, 60) end
+		return out("\u{1F33F} Racines : il se soigne (attaque spéciale)", 1, 90, 200, 80)
+	elseif m == "phase" then
+		if e.phased then return out("\u{1F47B} INTANGIBLE : attaque spéciale", 1, 160, 110, 255) end
+		return out("\u{1F47B} Visible : frappe-le !", 0.35, 200, 200, 230)
+	elseif m == "burn" then
+		if e.flameNext then return out("\u{1F525} FLAMME MAUDITE ! Protège-toi", 1, 255, 50, 40) end
+		local pet = b.playerPets[b.playerCurrent]
+		if pet and (pet.burn or 0) > 0 then return out("\u{1F525} Ton pet brûle : change de pet", pet.burn / 3, 255, 140, 40) end
+		return out("\u{1F525} Flamme dans " .. left .. " coup(s)", 1 - left / 3, 230, 120, 50)
+	elseif m == "illusion" then
+		if (e.illusions or 0) > 0 then return out("\u{1F98A} " .. (e.illusions + 1) .. " renards : attaque spéciale", e.illusions / 2, 255, 130, 200) end
+		return out("\u{1F98A} Illusions dans " .. left .. " coup(s)", 1 - left / 3, 230, 150, 200)
+	elseif m == "counter" then
+		if e.stance then return out("\u{2694} POSTURE DE CONTRE : protège-toi !", 1, 255, 50, 40) end
+		if e.riposte then return out("\u{2694} RIPOSTE en approche !", 1, 255, 90, 60) end
+		return out("\u{2694} Posture dans " .. left .. " coup(s)", 1 - left / 3, 200, 120, 200)
+	elseif m == "eclipse" then
+		if not e.awakened then return out("\u{1F311} S'éveille à 50 % de PV", (1 - e.hp / e.maxHp) * 2, 150, 90, 255) end
+		if e.eclipseNext then return out("\u{1F311} ÉCLIPSE ! Protège-toi", 1, 255, 50, 40) end
+		return out("\u{1F311} ÉVEILLÉ : éclipse dans " .. left .. " coup(s)", 1 - left / 3, 120, 60, 220)
+	end
+	return nil
+end
+
+-- juste avant le coup du boss : renvoie le multiplicateur, un texte et les degats de brulure
+function BossFight.beforeAttack(b, enemy, myPet, guarded)
+	local mult, log, burn = 1, nil, 0
+	if not enemy.isBoss or not enemy.mech then return mult, log, burn end
+	if (myPet.burn or 0) > 0 then
+		burn = math.max(1, math.floor(myPet.maxHp * 0.06))
+		myPet.burn -= 1
+	end
+	local m = enemy.mech
+	if m == "charge" and enemy.winding then
+		enemy.winding = false
+		mult, log = 3, "CHARGE !"
+		if guarded then
+			enemy.stunned = true
+			log = "CHARGE ! Il s'écrase contre ta garde et sera sonné !"
+		end
+	elseif m == "counter" then
+		if enemy.riposte then
+			enemy.riposte = false
+			mult, log = 2.5, "RIPOSTE !"
+		elseif enemy.stance then
+			enemy.stance = false
+			if guarded then
+				enemy.stunned = true
+				log = "Tu n'as pas attaqué : l'Oni perd patience et sera sonné !"
+			end
+		end
+	elseif m == "burn" and enemy.flameNext then
+		enemy.flameNext = false
+		mult = 1.5
+		if guarded then
+			log = "FLAMME MAUDITE ! Ta garde la bloque !"
+		else
+			myPet.burn = 3
+			log = "FLAMME MAUDITE ! " .. myPet.name .. " prend feu !"
+		end
+	elseif m == "eclipse" then
+		if not enemy.awakened and enemy.hp <= enemy.maxHp / 2 then
+			enemy.awakened = true
+			enemy.attack = math.floor(enemy.attack * 1.4)
+			log = "LE NÉANT S'ÉVEILLE !"
+		end
+		if enemy.eclipseNext then
+			enemy.eclipseNext = false
+			mult = 3
+			if guarded then
+				log = "ÉCLIPSE ! Ta garde tient bon !"
+			else
+				myPet.charge = 0
+				log = "ÉCLIPSE ! Ton pet perd toute sa charge !"
+			end
+		end
+	end
+	return mult, log, burn
+end
+
+-- juste apres le coup du boss : avance son compteur et annonce le prochain coup special
+function BossFight.afterAttack(b, enemy, myPet)
+	local m = enemy.mech
+	if not enemy.isBoss or not m or m == "heat" or m == "shield" then return "" end
+	enemy.t = (enemy.t or 0) + 1
+	local cycle = enemy.t % 3
+	if m == "charge" and cycle == 2 then
+		enemy.winding = true
+		return " L'Orque prend son élan !"
+	elseif m == "counter" and cycle == 2 then
+		enemy.stance = true
+		return " L'Oni se met en posture de contre !"
+	elseif m == "burn" and cycle == 2 then
+		enemy.flameNext = true
+		return " Ignareth prépare une flamme maudite !"
+	elseif m == "eclipse" and enemy.awakened and cycle == 2 then
+		enemy.eclipseNext = true
+		return " Le Néant prépare une ÉCLIPSE !"
+	elseif m == "illusion" and cycle == 0 then
+		enemy.illusions = 2
+		return " Le renard se divise en trois !"
+	elseif m == "phase" then
+		enemy.phased = not enemy.phased
+		return enemy.phased and " Le spectre devient intangible !" or " Le spectre redevient visible !"
+	elseif m == "roots" then
+		if (enemy.rootsCut or 0) > 0 then
+			enemy.rootsCut -= 1
+		elseif enemy.hp < enemy.maxHp then
+			local heal = math.floor(enemy.maxHp * 0.08)
+			enemy.hp = math.min(enemy.maxHp, enemy.hp + heal)
+			return " Ses racines le soignent (+" .. heal .. " PV) !"
+		end
+	end
+	return ""
+end
+
+-- dans l'arene : contour rouge et bras leves avant un coup dangereux, et un effet par boss
+function BossFight.mechVisual(b)
+	local e = b.npcPets[b.npcCurrent]
+	local model = b.trainerModel
+	if not e or not e.isBoss or not e.mech or not model or not model.Parent then return end
+	local danger = BossFight.danger(b)
+	local glow = model:FindFirstChild("MWS_Danger")
+	if not glow then
+		glow = Instance.new("Highlight")
+		glow.Name = "MWS_Danger"
+		glow.FillColor = Color3.fromRGB(255, 40, 40)
+		glow.FillTransparency = 0.75
+		glow.OutlineColor = Color3.fromRGB(255, 70, 70)
+		glow.Enabled = false
+		glow.Parent = model
+	end
+	glow.Enabled = danger
+	if e.mech ~= "heat" and b.trainerPose then b.trainerPose(danger and 0.6 or 0) end
+	if e.mech == "phase" then
+		-- le spectre devient presque transparent quand il est intangible
+		if not b.ghostBase then
+			b.ghostBase = {}
+			for _, part in ipairs(model:GetDescendants()) do
+				if part:IsA("BasePart") and part.Transparency < 1 then b.ghostBase[part] = part.Transparency end
+			end
+		end
+		for part, base in pairs(b.ghostBase) do
+			if part.Parent then part.Transparency = e.phased and (1 - (1 - base) * 0.3) or base end
+		end
+	elseif e.mech == "shield" then
+		-- bulle bleue autour du chevalier quand son bouclier est leve
+		if not b.bubble then
+			local cf, size = model:GetBoundingBox()
+			local bubble = Instance.new("Part")
+			bubble.Name = "MWS_Shield"
+			bubble.Shape = Enum.PartType.Ball
+			bubble.Material = Enum.Material.ForceField
+			bubble.Color = Color3.fromRGB(110, 180, 255)
+			bubble.Size = Vector3.one * math.max(size.X, size.Y, size.Z) * 1.05
+			bubble.CFrame = cf
+			bubble.Anchored, bubble.CanCollide, bubble.CanQuery, bubble.CanTouch = true, false, false, false
+			bubble.Parent = model
+			b.bubble = bubble
+		end
+		b.bubble.Transparency = e.shield and 0 or 1
+	elseif e.mech == "roots" then
+		-- feuilles vertes qui montent tant que les racines le soignent
+		local body = model:FindFirstChild("BossBody")
+		if body and not b.rootFx then
+			b.rootFx = emitter(body, Color3.fromRGB(120, 230, 90), 0, body.Size.Y * 0.05, 1.6, body.Size.Y * 0.1)
+			b.rootFx.EmissionDirection = Enum.NormalId.Top
+		end
+		if b.rootFx then b.rootFx.Rate = ((e.rootsCut or 0) > 0) and 0 or 10 end
+	elseif e.mech == "illusion" then
+		-- copies transparentes du renard, de chaque cote
+		b.illusions = b.illusions or {}
+		local want = e.illusions or 0
+		while #b.illusions > want do table.remove(b.illusions):Destroy() end
+		if #b.illusions < want and not b.illusionTemplate then
+			local copy = model:Clone()
+			for _, item in ipairs(copy:GetDescendants()) do
+				if item:IsA("BillboardGui") or item:IsA("ParticleEmitter") or item:IsA("Light") or item:IsA("Highlight") then
+					item:Destroy()
+				elseif item:IsA("BasePart") then
+					item.Anchored, item.CanCollide, item.CanQuery, item.CanTouch = true, false, false, false
+					item.Transparency = 1 - (1 - item.Transparency) * 0.5
+				end
+			end
+			b.illusionTemplate = copy
+		end
+		while #b.illusions < want do
+			local ghost = b.illusionTemplate:Clone()
+			ghost:PivotTo(model:GetPivot() + V3(0, 0, (#b.illusions == 0) and 9 or -9))
+			ghost.Parent = model
+			table.insert(b.illusions, ghost)
+		end
+	end
+end
+
 function BossFight.status(b)
 	local enemy = b.npcPets[b.npcCurrent]
 	if not enemy or not b.active then return nil end
 	if enemy.stunned then return "\u{1F4AB} " .. enemy.name .. " est sonné : il ne pourra pas attaquer !" end
+	if enemy.isBoss and enemy.mech and enemy.mech ~= "heat" and enemy.mech ~= "shield" then
+		local gauge = BossFight.gauge(b)
+		return gauge and gauge.text
+	end
 	if enemy.shield then return "\u{1F6E1} Bouclier levé : seule une attaque chargée peut le briser !" end
 	if (enemy.cooled or 0) > 0 then return "\u{2744} Le Golem refroidit : il subit +50 % de dégâts !" end
 	if enemy.heat then
@@ -4202,6 +4439,31 @@ end
 
 -- ajuste les degats d'une attaque du joueur ; heavy = attaque chargee
 function BossFight.strike(enemy, damage, heavy)
+	if enemy.mech == "phase" and enemy.phased then
+		if heavy then return damage, " L'attaque spéciale touche le spectre !" end
+		return 0, " Ton attaque traverse le spectre !"
+	end
+	if enemy.mech == "illusion" and (enemy.illusions or 0) > 0 then
+		if heavy then
+			enemy.illusions = 0
+			return damage, " Ton attaque dissipe les illusions !"
+		end
+		if math.random(1, enemy.illusions + 1) == 1 then
+			enemy.illusions = 0
+			return damage, " Tu as touché le vrai renard !"
+		end
+		enemy.illusions -= 1
+		return 0, " C'était une illusion !"
+	end
+	if enemy.mech == "counter" and enemy.stance then
+		enemy.stance = false
+		enemy.riposte = true
+		return math.floor(damage * 0.5), " L'Oni pare ton coup et prépare une riposte !"
+	end
+	if enemy.mech == "roots" and heavy then
+		enemy.rootsCut = 3
+		return damage, " RACINES TRANCHÉES !"
+	end
 	if enemy.shield then
 		if heavy then
 			enemy.shield = false
@@ -4219,6 +4481,7 @@ local function sendBattleUpdate(player)
 	if not b then return end
 	updateArenaVisuals(b)
 	BossFight.heatVisual(b)
+	BossFight.mechVisual(b)
 	local myPet = b.playerPets[b.playerCurrent]
 	BattleUpdate:FireClient(player, {
 		playerPets = b.playerPets, npcPets = b.npcPets,
@@ -4229,6 +4492,7 @@ local function sendBattleUpdate(player)
 		playerCanSuper = myPet and myPet.charge >= myPet.maxCharge or false,
 		fxId = b.fxId, fxPower = b.fxPower, fxFrom = b.fxFrom, fxTo = b.fxTo,
 		status = BossFight.status(b),
+		mechGauge = BossFight.gauge(b), danger = BossFight.danger(b),
 	})
 end
 
@@ -4252,6 +4516,7 @@ local function battlePayload(b)
 		playerMaxCharge = myPet and myPet.maxCharge or 100,
 		playerCanSuper = myPet and myPet.charge >= myPet.maxCharge or false,
 		status = BossFight.status(b),
+		mechGauge = BossFight.gauge(b), danger = BossFight.danger(b),
 	}
 end
 
@@ -4297,6 +4562,8 @@ local function processNPCAttack(player, expected)
 	local crit = (not isSuper) and math.random() < 0.1
 	if crit then damage = math.floor(damage * 1.5) end
 	local guarded = b.guard == true
+	local mechMult, mechLog, burnDamage = BossFight.beforeAttack(b, enemyPet, myPet, guarded)
+	damage = math.floor(damage * mechMult)
 	b.guard = false
 	if guarded then damage = math.max(1, math.floor(damage * BossFight.GUARD_FACTOR)) end
 
@@ -4321,6 +4588,12 @@ local function processNPCAttack(player, expected)
 		end
 	end
 	if guarded then b.log = b.log .. " Ton pet se protège !" end
+	if mechLog then b.log = mechLog .. " " .. b.log end
+	b.log = b.log .. BossFight.afterAttack(b, enemyPet, myPet)
+	if burnDamage > 0 then
+		damage = damage + burnDamage
+		b.log = b.log .. " La brûlure inflige " .. burnDamage .. " degats !"
+	end
 	local ev, pv = b.vis.npc, b.vis.player
 	local power = isSuper and 4 or (crit and 2 or 1)
 	local hit = impactDelay(power)
@@ -4562,8 +4835,12 @@ local function processPlayerSwitch(player)
 		end
 	end
 	if not nxt then return end
+	-- le pet qui sort n'est plus en feu (reponse a la flamme maudite d'Ignareth)
+	local leaving = b.playerPets[b.playerCurrent]
+	local cured = leaving ~= nil and (leaving.burn or 0) > 0
+	if leaving then leaving.burn = nil end
 	b.playerCurrent = nxt
-	b.log = "Tu changes pour " .. b.playerPets[nxt].name .. " !"
+	b.log = "Tu changes pour " .. b.playerPets[nxt].name .. " !" .. (cured and (" " .. leaving.name .. " n'est plus en feu.") or "")
 	b.turn = "npc"
 	sendBattleUpdate(player)
 	task.delay(0.7, function() processNPCAttack(player, b) end)
