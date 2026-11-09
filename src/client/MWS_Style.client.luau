@@ -102,13 +102,19 @@ local function styleButton(button)
 	local ringStroke = new("UIStroke", { Color = WHITE, Thickness = 2 * LINE, ApplyStrokeMode = Enum.ApplyStrokeMode.Border }, ring)
 	local ringShade = new("UIGradient", { Rotation = math.random(0, 359) }, ringStroke)
 	spinning[ringShade] = true
-	-- bande de lumiere qui traverse la face au survol
-	local shine = new("CanvasGroup", { BackgroundTransparency = 1, Size = UDim2.fromScale(1, 1), ZIndex = button.ZIndex }, face)
-	new("UICorner", { CornerRadius = radius }, shine)
+	-- reflet de lumiere qui traverse la face au survol : un degrade dans la forme exacte du bouton
+	-- (coins arrondis compris), donc il ne deborde jamais
 	local band = new("Frame", {
-		BackgroundColor3 = WHITE, BackgroundTransparency = 0.35, BorderSizePixel = 0, Size = UDim2.new(0, 14, 2, 0),
-		Position = UDim2.new(-0.25, 0, -0.5, 0), Rotation = 20, Visible = false, ZIndex = button.ZIndex,
-	}, shine)
+		Name = "MWS_Shine", BackgroundColor3 = WHITE, BorderSizePixel = 0, Size = UDim2.fromScale(1, 1),
+		Visible = false, ZIndex = button.ZIndex,
+	}, face)
+	new("UICorner", { CornerRadius = radius }, band)
+	local bandShade = new("UIGradient", {
+		Rotation = 20, Offset = Vector2.new(-1, 0),
+		Transparency = NumberSequence.new({
+			NumberSequenceKeypoint.new(0, 1), NumberSequenceKeypoint.new(0.5, 0.4), NumberSequenceKeypoint.new(1, 1),
+		}),
+	}, band)
 
 	local label = new("TextLabel", {
 		Name = "MWS_Label", BackgroundTransparency = 1, Size = UDim2.new(1, -4, 1, -3), Position = UDim2.fromOffset(2, 0),
@@ -153,8 +159,8 @@ local function styleButton(button)
 		tween(press, 0.18, { Scale = 1.07 })
 		if not band.Visible then
 			band.Visible = true
-			band.Position = UDim2.new(-0.25, 0, -0.5, 0)
-			tween(band, 0.45, { Position = UDim2.new(1.15, 0, -0.5, 0) }, Enum.EasingStyle.Quad, Enum.EasingDirection.InOut)
+			bandShade.Offset = Vector2.new(-1, 0)
+			tween(bandShade, 0.45, { Offset = Vector2.new(1, 0) }, Enum.EasingStyle.Quad, Enum.EasingDirection.InOut)
 				.Completed:Once(function() band.Visible = false end)
 		end
 	end)
