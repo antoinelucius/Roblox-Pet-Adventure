@@ -2753,17 +2753,6 @@ do
     -- parties de la boutique + menu de droite qui fait defiler jusqu'a chacune
     local shopUI = {
         headers = {},
-        -- images des articles (sinon le modele 3D de MWS_ShopIcons, sinon l'icone)
-        images = {
-            Cash1 = "rbxassetid://77448100725172",
-            Cash2 = "rbxassetid://128631904278414",
-            Cash3 = "rbxassetid://118822943439682",
-            PotionLuck = "rbxassetid://100782958863911",
-            PotionSpeed = "rbxassetid://78020082797000",
-        },
-        -- largeur / hauteur de ces images : leur bas est coupe (decoupees d'une capture), il est
-        -- pose juste derriere le bandeau du nom pour que l'objet ait l'air pose dessus
-        ratios = { Cash1 = 1.94, Cash2 = 1.73, Cash3 = 1.76, PotionLuck = 2.2, PotionSpeed = 2.2 },
         sections = {
             { key = "coins",  title = "PIÈCES",   icon = "\u{1F4B0}", color = Color3.fromRGB(60, 190, 90),  columns = 3 },
             { key = "boosts", title = "POTIONS",  icon = "\u{1F9EA}", color = Color3.fromRGB(150, 90, 240), columns = 3 },
@@ -3261,161 +3250,14 @@ do
                 grid.Parent = group
 
                 for i, item in ipairs(items) do
-                    local card = Instance.new("Frame")
-                    card.LayoutOrder = i
-                    card.BackgroundColor3 = WHITE
-                    card.ZIndex = 7
-                    makeCorner(card, 12)
-                    card.Parent = group
-                    local shade = Instance.new("UIGradient")
-                    shade.Color = ColorSequence.new(section.color, section.color:Lerp(Color3.new(0, 0, 0), 0.65))
-                    shade.Rotation = 90
-                    shade.Parent = card
-                    local edge = Instance.new("UIStroke")
-                    edge.Color = section.color:Lerp(WHITE, 0.35)
-                    edge.Thickness = 2
-                    edge.Parent = card
-
-                    local icon = Instance.new("TextLabel")
-                    icon.Size = UDim2.new(1, 0, 0, 104)
-                    icon.Position = UDim2.new(0, 0, 0, 6)
-                    icon.BackgroundTransparency = 1
-                    icon.Text = item.icon or "?"
-                    icon.TextSize = 56
-                    icon.Font = Enum.Font.GothamBold
-                    icon.TextColor3 = WHITE
-                    icon.ZIndex = 8
-                    icon.Parent = card
-                    -- image 3D de l'article, a la place de l'icone
-                    -- (GetService ici : ce bloc est a la limite de variables capturees)
-                    local iconFolder = game:GetService("ReplicatedStorage"):FindFirstChild("MWS_ShopIcons")
-                    local template = item.model and iconFolder and iconFolder:FindFirstChild(item.model)
-                    local picture = item.model and shopUI.images[item.model]
-                    if picture then
-                        icon.Visible = false
-                        local image = Instance.new("ImageLabel")
-                        -- a la forme exacte du fichier, le bas cache 2 px derriere le bandeau du nom (y = 112)
-                        image.AnchorPoint = Vector2.new(0.5, 1)
-                        image.Position = UDim2.new(0.5, 0, 0, 114)
-                        image.Size = UDim2.new(0, 130, 0, math.floor(130 / (shopUI.ratios[item.model] or 1.8)))
-                        image.BackgroundTransparency = 1
-                        image.Image = picture
-                        image.ScaleType = Enum.ScaleType.Fit
-                        image.ZIndex = 8
-                        image.Parent = card
-                        -- halo clair derriere l'objet
-                        local glow = Instance.new("Frame")
-                        glow.AnchorPoint = Vector2.new(0.5, 0.5)
-                        glow.Position = UDim2.new(0.5, 0, 0, 68)
-                        glow.Size = UDim2.new(0, 156, 0, 88)
-                        glow.BackgroundColor3 = WHITE
-                        glow.BackgroundTransparency = 0.72
-                        glow.ZIndex = 7
-                        makeCorner(glow, 48)
-                        glow.Parent = card
-                    elseif template then
-                        icon.Visible = false
-                        local view = Instance.new("ViewportFrame")
-                        view.Size = UDim2.new(1, 0, 0, 108)
-                        view.Position = UDim2.new(0, 0, 0, 2)
-                        view.BackgroundTransparency = 1
-                        view.Ambient = Color3.fromRGB(150, 150, 150)
-                        local tint = template:GetAttribute("Tint")
-                        if tint then view.ImageColor3 = tint end
-                        view.LightColor = Color3.fromRGB(255, 255, 255)
-                        view.LightDirection = Vector3.new(-1, -2, -2)
-                        view.ZIndex = 8
-                        view.Parent = card
-                        local shown = template:Clone()
-                        shown.Parent = view
-                        local boxCF, boxSize = shown:GetBoundingBox()
-                        local camera = Instance.new("Camera")
-                        local reach = math.max(boxSize.X, boxSize.Y, boxSize.Z)
-                        local eye = boxCF.Position + Vector3.new(reach * 0.4, reach * 0.7, -reach * 1.45)
-                        camera.CFrame = CFrame.lookAt(eye, boxCF.Position)
-                        camera.FieldOfView = 40
-                        camera.Parent = view
-                        view.CurrentCamera = camera
-                    end
-
-                    -- bandeau du nom : passe devant le bas de l'image
-                    local ribbon = Instance.new("Frame")
-                    ribbon.Position = UDim2.new(0, 0, 0, 112)
-                    ribbon.Size = UDim2.new(1, 0, 0, 28)
-                    ribbon.BackgroundColor3 = section.color:Lerp(Color3.new(0, 0, 0), 0.6)
-                    ribbon.BorderSizePixel = 0
-                    ribbon.ZIndex = 9
-                    ribbon.Parent = card
-
-                    local nameL = Instance.new("TextLabel")
-                    nameL.Size = UDim2.new(1, -16, 0, 24)
-                    nameL.Position = UDim2.new(0, 8, 0, 114)
-                    nameL.BackgroundTransparency = 1
-                    nameL.Text = item.name or ""
-                    nameL.TextColor3 = WHITE
-                    nameL.Font = Enum.Font.GothamBlack
-                    nameL.TextSize = 16
-                    nameL.TextStrokeTransparency = 0.4
-                    nameL.TextTruncate = Enum.TextTruncate.AtEnd
-                    nameL.ZIndex = 10
-                    nameL.Parent = card
-
-                    local descL = Instance.new("TextLabel")
-                    descL.Size = UDim2.new(1, -16, 0, 34)
-                    descL.Position = UDim2.new(0, 8, 0, 142)
-                    descL.BackgroundTransparency = 1
-                    descL.Text = item.desc or ""
-                    descL.TextColor3 = Color3.fromRGB(235, 235, 240)
-                    descL.Font = Enum.Font.GothamMedium
-                    descL.TextSize = 12
-                    descL.TextWrapped = true
-                    descL.TextYAlignment = Enum.TextYAlignment.Top
-                    descL.ZIndex = 8
-                    descL.Parent = card
-
-                    local buy = Instance.new("TextButton")
-                    buy.Size = UDim2.new(1, -16, 0, 40)
-                    buy.Position = UDim2.new(0, 8, 1, -48)
-                    buy.Font = Enum.Font.FredokaOne
-                    buy.TextSize = 21
-                    buy.TextColor3 = WHITE
-                    buy.TextStrokeTransparency = 0.2
-                    buy.ZIndex = 8
-                    makeCorner(buy, 10)
-                    -- etiquette : relief clair en haut, contour sombre
-                    local shine = Instance.new("UIGradient")
-                    shine.Color = ColorSequence.new(WHITE, Color3.fromRGB(165, 165, 165))
-                    shine.Rotation = 90
-                    shine.Parent = buy
-                    local outline = Instance.new("UIStroke")
-                    outline.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
-                    outline.Color = Color3.fromRGB(15, 35, 15)
-                    outline.Thickness = 3
-                    outline.Parent = buy
-                    if item.inventory then
-                        buy.Text = item.count > 0 and "Utiliser" or "Aucune"
-                        buy.BackgroundColor3 = item.count > 0 and Color3.fromRGB(150, 90, 240) or Color3.fromRGB(80, 80, 95)
-                    elseif item.owned and item.trail then
-                        buy.Text = item.equipped and "Retirer" or "Équiper"
-                        buy.BackgroundColor3 = item.equipped and Color3.fromRGB(150, 70, 80) or Color3.fromRGB(50, 110, 200)
-                    elseif item.owned then
-                        buy.Text = "\u{2714} Possédé"
-                        buy.BackgroundColor3 = Color3.fromRGB(60, 120, 70)
-                    elseif not item.available then
-                        buy.Text = item.unlock and ("\u{1F512} " .. item.unlock) or "Bientôt"
-                        buy.BackgroundColor3 = Color3.fromRGB(80, 80, 95)
-                    else
-                        buy.Text = "\u{E002} " .. tostring(item.price or "?")
-                        buy.BackgroundColor3 = Color3.fromRGB(95, 235, 30)
-                    end
-                    buy.Parent = card
-                    buy.MouseButton1Click:Connect(function()
-                        if item.inventory then
-                            if item.count > 0 then remotes:WaitForChild("UsePotion"):FireServer(item.key) end
-                        elseif item.owned and item.trail then
-                            remotes:WaitForChild("SetTrail"):FireServer(item.equipped and "" or item.key)
-                        elseif not item.owned then
-                            ShopBuy:FireServer(item.key)
+                    -- carte construite par MWS_ShopCards : objet 3D en briques toujours entier et centre
+                    require(ReplicatedStorage:WaitForChild("MWS_ShopCards")).card(group, item, section, i, function(clicked)
+                        if clicked.inventory then
+                            if clicked.count > 0 then remotes:WaitForChild("UsePotion"):FireServer(clicked.key) end
+                        elseif clicked.owned and clicked.trail then
+                            remotes:WaitForChild("SetTrail"):FireServer(clicked.equipped and "" or clicked.key)
+                        elseif not clicked.owned then
+                            ShopBuy:FireServer(clicked.key)
                         end
                     end)
                 end
