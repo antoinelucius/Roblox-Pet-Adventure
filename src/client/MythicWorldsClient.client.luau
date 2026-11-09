@@ -2874,7 +2874,7 @@ do
 
     local function coinsText(okCoins)
         local cost = rebirthInfo.cost or 0
-        return (okCoins and "\u{2705} " or "\u{274C} ") .. "Avoir " .. cost .. " coins (" .. math.floor(math.min(state.coins or 0, cost)) .. "/" .. cost .. ")"
+        return (okCoins and "\u{2705} " or "\u{274C} ") .. "Avoir " .. fmtNum(cost) .. " coins (" .. fmtNum(math.min(state.coins or 0, cost)) .. " / " .. fmtNum(cost) .. ")"
     end
 
     local function refreshRebirth()

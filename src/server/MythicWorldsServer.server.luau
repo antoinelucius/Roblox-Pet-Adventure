@@ -48,6 +48,8 @@ local MAX_EQUIPPED = 6
 local function maxEquip(s)
 	return math.min(MAX_EQUIPPED, 2 + math.floor(((s and s.rebirthLevel) or 0) / 2))
 end
+-- prix de la 1re renaissance ; chaque renaissance coute ensuite 3 fois plus que la precedente
+-- (250 000, 750 000, 2,25 M, 6,75 M, 20 M pour la 5e qui ouvre le monde 3...)
 local REBIRTH_COST = TEST_MODE and 300 or 250000
 local PET_SCALE = 0.7
 local SPEED_BOOST_COST = 500
@@ -61,8 +63,8 @@ local SPEED_BOOST_MULT = 2
 local WORLDS = {
 	-- unlock = coins a payer (une fois) | rebirth = nombre de renaissances necessaires pour entrer
 	{ name = "Prairie enchantee",  unlock = 0,                              rebirth = 0, offset = V3(0, 0, 0),    crystalReward = 25 },
-	{ name = "Royaume volcanique", unlock = TEST_MODE and 0 or 5000,       rebirth = TEST_MODE and 0 or 1, offset = V3(2000, 0, 0), crystalReward = 200 },
-	{ name = "Dimension mythique", unlock = TEST_MODE and 0 or 150000,     rebirth = TEST_MODE and 0 or 5, offset = V3(4000, 0, 0), crystalReward = 2000 },
+	{ name = "Royaume volcanique", unlock = TEST_MODE and 0 or 25000,      rebirth = TEST_MODE and 0 or 1, offset = V3(2000, 0, 0), crystalReward = 200 },
+	{ name = "Dimension mythique", unlock = TEST_MODE and 0 or 1000000,    rebirth = TEST_MODE and 0 or 5, offset = V3(4000, 0, 0), crystalReward = 2000 },
 }
 
 local worldOrigin = {}
@@ -1548,7 +1550,8 @@ local function sendNPCInfo(player)
 	end
 	local needed, done = 0, 0
 	if s then needed, done = rebirthRequirement(s) end
-	NPCInfo:FireClient(player, npcData, #NPC_TRAINERS, { needed = needed, done = done, cost = REBIRTH_COST })
+	local cost = s and math.floor(REBIRTH_COST * 3 ^ math.min(s.rebirthLevel or 0, 20)) or REBIRTH_COST
+	NPCInfo:FireClient(player, npcData, #NPC_TRAINERS, { needed = needed, done = done, cost = cost })
 end
 
 local function finiteNumber(value, fallback, minimum, maximum)
@@ -5046,8 +5049,10 @@ RebirthRemote.OnServerEvent:Connect(function(player)
 		RebirthRemote:FireClient(player, { success = false, message = "Tu dois battre les dresseurs de tes mondes ! (" .. done .. "/" .. needed .. ")" })
 		return
 	end
-	if s.coins < REBIRTH_COST then
-		RebirthRemote:FireClient(player, { success = false, message = "Il te faut " .. REBIRTH_COST .. " coins pour renaitre !" })
+	-- chaque renaissance coute 3 fois plus que la precedente
+	local cost = math.floor(REBIRTH_COST * 3 ^ math.min(s.rebirthLevel or 0, 20))
+	if s.coins < cost then
+		RebirthRemote:FireClient(player, { success = false, message = "Il te faut " .. fmt(cost) .. " coins pour renaitre !" })
 		return
 	end
 	s.rebirthLevel = (s.rebirthLevel or 0) + 1
