@@ -1644,7 +1644,9 @@ function Saves.snapshot(s)
 	}
 end
 
-local OFFLINE_RATE, OFFLINE_MAX = 0.25, 8 * 3600
+-- gains hors ligne : 10 % du revenu pendant 3 h au plus (soit 18 min de jeu au maximum) ;
+-- avant 25 % pendant 8 h, ce qui rendait le joueur riche trop facilement
+local OFFLINE_RATE, OFFLINE_MAX = 0.10, 3 * 3600
 local function loadPlayer(player)
 	local data, session, version
 	if datastoreAvailable then
@@ -1749,7 +1751,7 @@ local function loadPlayer(player)
 	s.defeatedNPCs = cleanDefeated
 	s.nextPetId = math.max(math.floor(finiteNumber(s.nextPetId, 1, 1, 9e15)), maxId + 1)
 	states[player.UserId] = s
-	-- gains hors ligne : tes pets equipes rapportent 25 % de leurs gains pendant ton absence (8 h max)
+	-- gains hors ligne : tes pets equipes rapportent 10 % de leurs gains pendant ton absence (3 h max)
 	local away = math.clamp(os.time() - finiteNumber(s.lastSeen, os.time(), 0), 0, OFFLINE_MAX)
 	s.lastSeen = nil
 	if away >= 60 then
@@ -1760,7 +1762,7 @@ local function loadPlayer(player)
 			local txt = (h > 0 and (h .. " h ") or "") .. m .. " min"
 			task.delay(4, function()
 				if player.Parent then
-					notify(player, "Bon retour ! Tes pets ont gagne " .. fmt(earned) .. " coins pendant ton absence (" .. txt .. ")", Color3.fromRGB(255, 220, 80))
+					notify(player, "Bon retour ! Tes pets ont gagne " .. fmt(earned) .. " coins pendant ton absence (" .. txt .. ", 3 h max)", Color3.fromRGB(255, 220, 80))
 				end
 			end)
 		end
