@@ -13,6 +13,9 @@ while not gui:GetAttribute("MenuReady") do gui:GetAttributeChangedSignal("MenuRe
 local WHITE = Color3.new(1, 1, 1)
 local INK = Color3.fromRGB(24, 8, 40)
 local TITLE_FONT = Enum.Font.FredokaOne
+-- telephone (meme seuil que MWS_MobileHud) : contours noirs plus fins
+local viewport = workspace.CurrentCamera.ViewportSize
+local LINE = (viewport.X > 1 and math.min(viewport.X, viewport.Y) < 500) and 0.6 or 1
 local function rgb(t) return Color3.fromRGB(t[1], t[2], t[3]) end
 
 local function new(class, props, parent)
@@ -65,7 +68,7 @@ local panel = new("Frame", {
 new("UISizeConstraint", { MaxSize = Vector2.new(680, 470) }, panel)
 corner(panel, UDim.new(0, 14))
 new("UIGradient", { Rotation = 90, Color = ColorSequence.new(Color3.fromRGB(150, 60, 225), Color3.fromRGB(80, 22, 140)) }, panel)
-new("UIStroke", { Thickness = 4, Color = INK, ApplyStrokeMode = Enum.ApplyStrokeMode.Border }, panel)
+new("UIStroke", { Thickness = 4 * LINE, Color = INK, ApplyStrokeMode = Enum.ApplyStrokeMode.Border }, panel)
 
 local header = new("Frame", { Size = UDim2.new(1, 0, 0, 62), BackgroundColor3 = WHITE, ZIndex = 6 }, panel)
 corner(header, UDim.new(0, 14))
@@ -77,7 +80,7 @@ local close = new("TextButton", {
 	AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, -8, 0, 7), Size = UDim2.fromOffset(46, 46), ZIndex = 9,
 }, header)
 corner(close, UDim.new(0, 8))
-new("UIStroke", { Thickness = 3, Color = INK, ApplyStrokeMode = Enum.ApplyStrokeMode.Border }, close)
+new("UIStroke", { Thickness = 3 * LINE, Color = INK, ApplyStrokeMode = Enum.ApplyStrokeMode.Border }, close)
 new("UIPadding", { PaddingTop = UDim.new(0, 6), PaddingBottom = UDim.new(0, 6) }, close)
 
 local body = new("Frame", { Position = UDim2.new(0, 14, 0, 72), Size = UDim2.new(1, -28, 1, -84), BackgroundTransparency = 1, ZIndex = 6 }, panel)
@@ -169,7 +172,7 @@ local back = new("TextButton", {
 	AnchorPoint = Vector2.new(0.5, 0), Position = UDim2.fromScale(0.5, 0.875), Size = UDim2.fromScale(0.75, 0.12), ZIndex = 8,
 }, left)
 corner(back, UDim.new(0, 6))
-new("UIStroke", { Thickness = 3, Color = INK, ApplyStrokeMode = Enum.ApplyStrokeMode.Border }, back)
+new("UIStroke", { Thickness = 3 * LINE, Color = INK, ApplyStrokeMode = Enum.ApplyStrokeMode.Border }, back)
 stroke(back, 2)
 new("UIPadding", { PaddingTop = UDim.new(0.14, 0), PaddingBottom = UDim.new(0.14, 0) }, back)
 
@@ -182,7 +185,7 @@ for i = 1, 5 do
 		Position = UDim2.fromScale(0, 0.1 + (i - 1) * 0.18), Size = UDim2.fromScale(1, 0.16), BackgroundColor3 = WHITE, ZIndex = 7,
 	}, right)
 	corner(row, UDim.new(0, 6))
-	new("UIStroke", { Thickness = 3, Color = INK, ApplyStrokeMode = Enum.ApplyStrokeMode.Border }, row)
+	new("UIStroke", { Thickness = 3 * LINE, Color = INK, ApplyStrokeMode = Enum.ApplyStrokeMode.Border }, row)
 	local grad = new("UIGradient", { Rotation = 90 }, row)
 	local name = label(row, { Position = UDim2.fromScale(0.02, 0.04), Size = UDim2.fromScale(0.66, 0.4), TextXAlignment = Enum.TextXAlignment.Left })
 	local need = label(row, { Position = UDim2.fromScale(0.68, 0.04), Size = UDim2.fromScale(0.3, 0.4), TextXAlignment = Enum.TextXAlignment.Right, TextColor3 = rgb(TIER_COLORS[i]) })

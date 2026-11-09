@@ -18,6 +18,9 @@ local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
 local gui = playerGui:WaitForChild("MWS_Gui")
 while not gui:GetAttribute("MenuReady") do gui:GetAttributeChangedSignal("MenuReady"):Wait() end
+-- telephone (meme seuil que MWS_MobileHud) : contours noirs plus fins, les boutons y sont petits
+local viewport = workspace.CurrentCamera.ViewportSize
+local LINE = (viewport.X > 1 and math.min(viewport.X, viewport.Y) < 500) and 0.6 or 1
 
 local function new(class, props, parent)
 	local item = Instance.new(class)
@@ -82,7 +85,7 @@ local function styleButton(button)
 	local radius = cornerOf(button)
 
 	-- contour noir ; le texte du bouton est remplace par une etiquette posee sur la face
-	new("UIStroke", { Color = BLACK, Thickness = 2.5, LineJoinMode = Enum.LineJoinMode.Round, ApplyStrokeMode = Enum.ApplyStrokeMode.Border }, button)
+	new("UIStroke", { Color = BLACK, Thickness = 2.5 * LINE, LineJoinMode = Enum.LineJoinMode.Round, ApplyStrokeMode = Enum.ApplyStrokeMode.Border }, button)
 	local face = new("ImageLabel", {
 		Name = "MWS_Face", Image = STUDS, ScaleType = Enum.ScaleType.Tile, TileSize = UDim2.fromOffset(26, 26), ImageTransparency = 0.55,
 		BackgroundColor3 = WHITE, BorderSizePixel = 0, Size = UDim2.new(1, 0, 1, -3), ZIndex = button.ZIndex,
@@ -95,7 +98,7 @@ local function styleButton(button)
 		Size = UDim2.new(1, -4, 1, -4), ZIndex = button.ZIndex,
 	}, face)
 	new("UICorner", { CornerRadius = UDim.new(radius.Scale, math.max(0, radius.Offset - 2)) }, ring)
-	local ringStroke = new("UIStroke", { Color = WHITE, Thickness = 2, ApplyStrokeMode = Enum.ApplyStrokeMode.Border }, ring)
+	local ringStroke = new("UIStroke", { Color = WHITE, Thickness = 2 * LINE, ApplyStrokeMode = Enum.ApplyStrokeMode.Border }, ring)
 	local ringShade = new("UIGradient", { Rotation = math.random(0, 359) }, ringStroke)
 	spinning[ringShade] = true
 	-- bande de lumiere qui traverse la face au survol
@@ -110,7 +113,7 @@ local function styleButton(button)
 		Name = "MWS_Label", BackgroundTransparency = 1, Size = UDim2.new(1, -4, 1, -3), Position = UDim2.fromOffset(2, 0),
 		ZIndex = button.ZIndex,
 	}, button)
-	new("UIStroke", { Color = BLACK, Thickness = 2, LineJoinMode = Enum.LineJoinMode.Round }, label)
+	new("UIStroke", { Color = BLACK, Thickness = 2 * LINE, LineJoinMode = Enum.LineJoinMode.Round }, label)
 	local function copyText()
 		label.Text, label.Font, label.TextSize = button.Text, button.Font, button.TextSize
 		label.TextScaled, label.TextColor3 = button.TextScaled, button.TextColor3
@@ -228,7 +231,7 @@ local function stylePanel(frame)
 				if child:IsA("UIStroke") and child.ApplyStrokeMode == Enum.ApplyStrokeMode.Border then hasBorder = true end
 			end
 			if not hasBorder then
-				new("UIStroke", { Color = BLACK, Thickness = 4, LineJoinMode = Enum.LineJoinMode.Round, ApplyStrokeMode = Enum.ApplyStrokeMode.Border }, frame)
+				new("UIStroke", { Color = BLACK, Thickness = 4 * LINE, LineJoinMode = Enum.LineJoinMode.Round, ApplyStrokeMode = Enum.ApplyStrokeMode.Border }, frame)
 			end
 		end
 		local nowVisible = frame.Visible
