@@ -2761,6 +2761,9 @@ do
             PotionLuck = "rbxassetid://100782958863911",
             PotionSpeed = "rbxassetid://78020082797000",
         },
+        -- largeur / hauteur de ces images : leur bas est coupe (decoupees d'une capture), il est
+        -- pose juste derriere le bandeau du nom pour que l'objet ait l'air pose dessus
+        ratios = { Cash1 = 1.94, Cash2 = 1.73, Cash3 = 1.76, PotionLuck = 2.2, PotionSpeed = 2.2 },
         sections = {
             { key = "coins",  title = "PIÈCES",   icon = "\u{1F4B0}", color = Color3.fromRGB(60, 190, 90),  columns = 3 },
             { key = "boosts", title = "POTIONS",  icon = "\u{1F9EA}", color = Color3.fromRGB(150, 90, 240), columns = 3 },
@@ -3291,10 +3294,10 @@ do
                     if picture then
                         icon.Visible = false
                         local image = Instance.new("ImageLabel")
-                        -- centree sur le halo (y = 58), assez petite pour rester au-dessus du bandeau du nom
-                        image.AnchorPoint = Vector2.new(0.5, 0.5)
-                        image.Position = UDim2.new(0.5, 0, 0, 58)
-                        image.Size = UDim2.new(0, 98, 0, 98)
+                        -- a la forme exacte du fichier, le bas cache 2 px derriere le bandeau du nom (y = 112)
+                        image.AnchorPoint = Vector2.new(0.5, 1)
+                        image.Position = UDim2.new(0.5, 0, 0, 114)
+                        image.Size = UDim2.new(0, 130, 0, math.floor(130 / (shopUI.ratios[item.model] or 1.8)))
                         image.BackgroundTransparency = 1
                         image.Image = picture
                         image.ScaleType = Enum.ScaleType.Fit
@@ -3303,8 +3306,8 @@ do
                         -- halo clair derriere l'objet
                         local glow = Instance.new("Frame")
                         glow.AnchorPoint = Vector2.new(0.5, 0.5)
-                        glow.Position = UDim2.new(0.5, 0, 0, 58)
-                        glow.Size = UDim2.new(0, 150, 0, 96)
+                        glow.Position = UDim2.new(0.5, 0, 0, 68)
+                        glow.Size = UDim2.new(0, 156, 0, 88)
                         glow.BackgroundColor3 = WHITE
                         glow.BackgroundTransparency = 0.72
                         glow.ZIndex = 7
