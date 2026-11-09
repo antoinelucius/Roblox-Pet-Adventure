@@ -61,7 +61,8 @@ local function cornerOf(item)
 end
 
 local function burst(button, text)
-	local center = button.AbsolutePosition + button.AbsoluteSize / 2
+	-- position dans le calque des effets, qui commence au-dessus de la barre Roblox (sinon 58 px trop haut)
+	local center = button.AbsolutePosition + button.AbsoluteSize / 2 - fxGui.AbsolutePosition
 	for i = 1, 8 do
 		local angle = math.rad(-90 + ((i - 0.5) / 8 - 0.5) * 360 + math.random(-12, 12))
 		local distance, size = math.random(55, 95), math.random(18, 26)
@@ -223,8 +224,8 @@ end
 -- ---------- interieur des menus en briques Lego (style du menu Renaissance) ----------
 -- cadre epais a la couleur du bouton qui ouvre le menu, rangees de plots en haut et en bas,
 -- fond a plots, cases interieures en briques (plots + contour sombre), boutons a plots.
--- Les menus deja dessines d'apres les images du proprietaire gardent leur style :
--- Renaissance et Quetes (contour colore), Maitrise, Parametres (autre ecran).
+-- Tous les menus de l'ecran principal, y compris Renaissance, Quetes et Maitrise (leur ancien
+-- cadre et leurs plots sont remplaces) ; seuls les Parametres (autre ecran) gardent leur style.
 local INK = Color3.fromRGB(16, 10, 26)
 local LEGO_COLORS = {
 	{ "Pets", Color3.fromRGB(120, 100, 200) },        -- bouton Pets (eclairci, comme sur telephone)
@@ -235,10 +236,13 @@ local LEGO_COLORS = {
 	{ "fusion", Color3.fromRGB(170, 90, 255) },
 	{ "aura", Color3.fromRGB(255, 80, 200) },
 	{ "Classement", Color3.fromRGB(190, 140, 40) },
+	{ "Renaissance", Color3.fromRGB(150, 60, 220) },
+	{ "Quêtes", Color3.fromRGB(40, 140, 235) },
 }
 
 local function legoAccent(frame)
 	if frame.Name == "MWS_TraitPanel" then return LEGO_COLORS[2][2] end   -- tailles et mutations, ouvert depuis les oeufs
+	if frame.Name == "MWS_MasteryPanel" then return Color3.fromRGB(170, 70, 230) end   -- bouton Maitrise
 	for _, child in ipairs(frame:GetChildren()) do
 		if child:IsA("TextLabel") and child.Text ~= "" then
 			for _, entry in ipairs(LEGO_COLORS) do
@@ -251,11 +255,7 @@ local function legoAccent(frame)
 end
 
 local function isCustomPanel(frame)
-	if frame.Parent ~= gui or frame.Name == "MWS_MasteryPanel" then return true end
-	for _, child in ipairs(frame:GetChildren()) do
-		if child:IsA("UIStroke") and child.Color ~= BLACK then return true end
-	end
-	return false
+	return frame.Parent ~= gui   -- les Parametres sont sur un autre ecran
 end
 
 -- fond a plots (texture des boutons), sous le contenu
@@ -278,7 +278,7 @@ local function legoItem(item)
 		if item.AbsoluteSize.X >= 24 and item.AbsoluteSize.Y >= 18 and item.BackgroundTransparency < 0.9 then styleButton(item) end
 		return
 	end
-	if not isCard or item.BackgroundTransparency >= 0.9 then return end
+	if not isCard or item.BackgroundTransparency >= 0.5 then return end
 	if item.AbsoluteSize.X < 40 or item.AbsoluteSize.Y < 24 then return end
 	item:SetAttribute("MWS_Lego", true)
 	-- pas de plots par-dessus l'image d'un pet
@@ -298,6 +298,19 @@ local function legoPanel(frame)
 	local accent = legoAccent(frame)
 	if not accent then return false end
 	frame.BackgroundColor3 = frame.BackgroundColor3:Lerp(accent, 0.1)
+	-- menus dessines a la main (Renaissance, Quetes) : on retire leur ancien cadre et leurs plots
+	local kept = false
+	for _, child in ipairs(frame:GetChildren()) do
+		if child:IsA("UIStroke") then
+			if not kept and child.ApplyStrokeMode == Enum.ApplyStrokeMode.Border then kept = true else child:Destroy() end
+		elseif child:IsA("Frame") and child.Name ~= "MWS_LegoRow" and child.BackgroundTransparency >= 1 and child:FindFirstChildOfClass("UIListLayout") then
+			local small = 0
+			for _, s in ipairs(child:GetChildren()) do
+				if s:IsA("Frame") and s.Size.X.Offset <= 10 and s.Size.Y.Offset <= 10 then small += 1 end
+			end
+			if small >= 8 then child:Destroy() end
+		end
+	end
 	-- cadre epais a la couleur du menu
 	local border
 	for _, child in ipairs(frame:GetChildren()) do
