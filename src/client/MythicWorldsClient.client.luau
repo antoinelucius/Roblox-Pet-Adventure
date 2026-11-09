@@ -3291,9 +3291,10 @@ do
                     if picture then
                         icon.Visible = false
                         local image = Instance.new("ImageLabel")
-                        image.AnchorPoint = Vector2.new(0.5, 0)
-                        image.Position = UDim2.new(0.5, 0, 0, 25)
-                        image.Size = UDim2.new(1, -40, 0, 88)
+                        -- centree sur le halo (y = 58), assez petite pour rester au-dessus du bandeau du nom
+                        image.AnchorPoint = Vector2.new(0.5, 0.5)
+                        image.Position = UDim2.new(0.5, 0, 0, 58)
+                        image.Size = UDim2.new(0, 98, 0, 98)
                         image.BackgroundTransparency = 1
                         image.Image = picture
                         image.ScaleType = Enum.ScaleType.Fit
