@@ -2841,13 +2841,13 @@ do
         end
     end
 
-    -- ---------- renaissance : conditions, gains et pertes ----------
-    local rbPanel, rbScroll, rbStatus = makePanel("\u{1F504} Renaissance", 470, 430)
+    -- ---------- renaissance : menu "Renaissance du Phenix" ----------
+    -- disposition du modele fourni : grand titre, phrase d'accroche, 3 cases a gauche
+    -- (gain, ce que tu as, prix), le Phenix et sa phrase a droite, gros bouton en bas a droite.
+    -- Le nombre de variables locales reste le meme qu'avant (le script est pres de la limite de 200).
+    local rbPanel, rbScroll, rbStatus = makePanel("\u{1F504} Renaissance", 640, 400)
     table.insert(extraPanels, rbPanel)
-    local rbLayout = Instance.new("UIListLayout")
-    rbLayout.Padding = UDim.new(0, 8)
-    rbLayout.SortOrder = Enum.SortOrder.LayoutOrder
-    rbLayout.Parent = rbScroll
+    local rbUI = {}   -- elements du menu, construits une seule fois
     local rbSig, rbCoinsLine = nil, nil
 
     local function rebirthChecks()
@@ -2856,59 +2856,212 @@ do
         return okNpc, okCoins
     end
 
-    local function rbLine(order, text, color, h)
-        local l = Instance.new("TextLabel")
-        l.LayoutOrder = order
-        l.Size = UDim2.new(1, -10, 0, h or 24)
-        l.BackgroundTransparency = 1
-        l.Text = text
-        l.TextColor3 = color or WHITE
-        l.Font = Enum.Font.GothamBold
-        l.TextSize = 15
-        l.TextWrapped = true
-        l.TextXAlignment = Enum.TextXAlignment.Left
-        l.ZIndex = 6
-        l.Parent = rbScroll
-        return l
-    end
-
-    local function coinsText(okCoins)
-        local cost = rebirthInfo.cost or 0
-        return (okCoins and "\u{2705} " or "\u{274C} ") .. "Avoir " .. fmtNum(cost) .. " coins (" .. fmtNum(math.min(state.coins or 0, cost)) .. " / " .. fmtNum(cost) .. ")"
-    end
-
-    local function refreshRebirth()
-        for _, c in ipairs(rbScroll:GetChildren()) do
-            if c:IsA("GuiObject") then c:Destroy() end
+    local function buildRb()
+        local INK = Color3.fromRGB(16, 8, 28)
+        rbScroll.Visible = false
+        rbStatus.Visible = false
+        rbPanel.BackgroundColor3 = Color3.fromRGB(20, 12, 34)
+        for _, child in ipairs(rbPanel:GetChildren()) do
+            if child:IsA("TextLabel") then
+                child.Visible = false   -- ancien petit titre
+            elseif child:IsA("TextButton") then
+                -- croix rouge posee sur le coin du cadre
+                child.AnchorPoint = Vector2.new(0.5, 0.5)
+                child.Position = UDim2.new(1, -8, 0, 8)
+                child.Size = UDim2.new(0, 46, 0, 46)
+                child.BackgroundColor3 = Color3.fromRGB(225, 25, 25)
+                child.TextSize = 26
+                child.ZIndex = 10
+                local cs = Instance.new("UIStroke")
+                cs.Color = INK
+                cs.Thickness = 2
+                cs.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+                cs.Parent = child
+            end
         end
-        local lvl = state.rebirthLevel or 0
-        local okNpc, okCoins = rebirthChecks()
-        local ready = okNpc and okCoins
-        local GREEN, RED = Color3.fromRGB(110, 230, 120), Color3.fromRGB(255, 110, 110)
-        rbSig = table.concat({ lvl, rebirthInfo.done or 0, rebirthInfo.needed or 0, rebirthInfo.cost or 0, tostring(okCoins) }, "|")
-        rbStatus.Text = "Ton niveau : " .. lvl .. "  ->  " .. (lvl + 1)
-        rbLine(1, "Pour renaitre, il faut :")
-        rbLine(2, (okNpc and "\u{2705} " or "\u{274C} ") .. "Battre tous les dresseurs de tes mondes (" .. (rebirthInfo.done or 0) .. "/" .. (rebirthInfo.needed or 0) .. ") : bouton Combat", okNpc and GREEN or RED, 40)
-        rbCoinsLine = rbLine(3, coinsText(okCoins), okCoins and GREEN or RED)
-        rbLine(4, "Tu gagnes : revenu x" .. (1 + (lvl + 1) * 0.5) .. " (au lieu de x" .. (1 + lvl * 0.5) .. ") et l'acces a de nouveaux mondes (Monde 2 : 1 renaissance, Monde 3 : 5).", Color3.fromRGB(255, 215, 120), 44)
-        rbLine(5, "Tu gardes tes pets et tes mondes. Tu perds tes coins et tes victoires contre les dresseurs.", Color3.fromRGB(190, 190, 205), 44)
+        -- cadre violet epais avec une rangee de plots dores en haut et en bas
+        local frameStroke = Instance.new("UIStroke")
+        frameStroke.Color = Color3.fromRGB(150, 60, 220)
+        frameStroke.Thickness = 8
+        frameStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border   -- MWS_Style n'ajoute pas son contour noir
+        frameStroke.Parent = rbPanel
+        for _, top in ipairs({ true, false }) do
+            local row = Instance.new("Frame")
+            row.Position = top and UDim2.new(0, 16, 0, -7) or UDim2.new(0, 16, 1, 1)
+            row.Size = UDim2.new(1, -32, 0, 6)
+            row.BackgroundTransparency = 1
+            row.ZIndex = 8
+            row.Parent = rbPanel
+            local rl = Instance.new("UIListLayout")
+            rl.FillDirection = Enum.FillDirection.Horizontal
+            rl.HorizontalFlex = Enum.UIFlexAlignment.SpaceEvenly
+            rl.VerticalAlignment = Enum.VerticalAlignment.Center
+            rl.Parent = row
+            for _ = 1, 26 do
+                local stud = Instance.new("Frame")
+                stud.Size = UDim2.new(0, 5, 0, 5)
+                stud.BackgroundColor3 = Color3.fromRGB(255, 205, 110)
+                stud.ZIndex = 8
+                makeCorner(stud, 2)
+                stud.Parent = row
+            end
+        end
+
+        -- texte : police des titres, contour sombre
+        local function text(props, outline)
+            local l = Instance.new("TextLabel")
+            l.BackgroundTransparency = 1
+            l.Font = Enum.Font.FredokaOne
+            l.TextScaled = true
+            l.TextColor3 = WHITE
+            l.ZIndex = 7
+            for k, v in pairs(props) do l[k] = v end
+            local ls = Instance.new("UIStroke")
+            ls.Color = INK
+            ls.Thickness = outline or 2
+            ls.Parent = l
+            l.Parent = rbPanel
+            return l
+        end
+        local function gradient(parent, a, b)
+            local g = Instance.new("UIGradient")
+            g.Rotation = 90
+            g.Color = ColorSequence.new(a, b)
+            g.Parent = parent
+            return g
+        end
+
+        -- titre et phrase d'accroche
+        local title = text({ Text = "RENAISSANCE DU PHÉNIX", Position = UDim2.fromScale(0.04, 0.05), Size = UDim2.fromScale(0.58, 0.11) }, 3)
+        gradient(title, Color3.fromRGB(255, 240, 150), Color3.fromRGB(255, 140, 40))
+        text({
+            Text = "Le Phénix rend tes pets plus forts à chaque renaissance (bien sûr, tu repars de zéro).",
+            Position = UDim2.fromScale(0.07, 0.165), Size = UDim2.fromScale(0.52, 0.1),
+            Font = Enum.Font.GothamBold, TextWrapped = true, TextColor3 = Color3.fromRGB(255, 215, 150),
+        }, 1)
+
+        -- les 3 cases de gauche : legende, case sombre, grande valeur, petite ligne
+        local function box(y, caption, narrow)
+            text({ Text = caption, Position = UDim2.fromScale(0.05, y), Size = UDim2.fromScale(0.42, 0.075) }, 2)
+            local b = Instance.new("Frame")
+            b.Position = UDim2.fromScale(0.05, y + 0.08)
+            b.Size = UDim2.fromScale(0.42, 0.15)
+            b.BackgroundColor3 = Color3.fromRGB(48, 30, 74)
+            b.ZIndex = 6
+            makeCorner(b, 14)
+            b.Parent = rbPanel
+            -- narrow : texte plus etroit pour laisser la place a la pastille
+            local w = narrow and 0.31 or 0.38
+            local value = text({ Position = UDim2.fromScale(0.07, y + 0.085), Size = UDim2.fromScale(w, 0.095), TextColor3 = Color3.fromRGB(255, 170, 60) }, 2)
+            local sub = text({ Position = UDim2.fromScale(0.07, y + 0.177), Size = UDim2.fromScale(w, 0.045), Font = Enum.Font.GothamBold, TextColor3 = Color3.fromRGB(255, 205, 130) }, 1)
+            return value, sub
+        end
+        rbUI.gain, rbUI.gainSub = box(0.28, "Chaque renaissance donne...", true)
+        rbUI.have, rbUI.haveSub = box(0.51, "Tu as...")
+        rbUI.cost, rbUI.costSub = box(0.74, "Pour renaître, il faut...")
+
+        -- pastille doree a droite de la 1re case : tes gains apres la renaissance
+        local badge = Instance.new("Frame")
+        badge.AnchorPoint = Vector2.new(0.5, 0.5)
+        badge.Position = UDim2.fromScale(0.455, 0.425)
+        badge.Size = UDim2.fromScale(0.14, 0.14)
+        badge.BackgroundColor3 = WHITE
+        badge.ZIndex = 8
+        makeCorner(badge, 12)
+        badge.Parent = rbPanel
+        local ar = Instance.new("UIAspectRatioConstraint")
+        ar.AspectRatio = 1.3
+        ar.Parent = badge
+        gradient(badge, Color3.fromRGB(255, 240, 120), Color3.fromRGB(255, 160, 30))
+        local bs = Instance.new("UIStroke")
+        bs.Color = INK
+        bs.Thickness = 3
+        bs.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+        bs.Parent = badge
+        rbUI.badge = text({ Size = UDim2.fromScale(0.86, 0.8), Position = UDim2.fromScale(0.07, 0.1), ZIndex = 9 }, 2)
+        rbUI.badge.Parent = badge
+        text({ Text = "après", AnchorPoint = Vector2.new(0.5, 0), Position = UDim2.fromScale(0.455, 0.5), Size = UDim2.fromScale(0.1, 0.04), Font = Enum.Font.GothamBold, TextColor3 = Color3.fromRGB(200, 180, 220) }, 1)
+
+        -- le Phenix (pet du jeu) dans un halo de feu, avec sa phrase
+        local halo = Instance.new("Frame")
+        halo.AnchorPoint = Vector2.new(0.5, 0.5)
+        halo.Position = UDim2.fromScale(0.83, 0.33)
+        halo.Size = UDim2.fromScale(0.42, 0.42)
+        halo.BackgroundColor3 = Color3.fromRGB(255, 120, 40)
+        halo.BackgroundTransparency = 0.7
+        halo.ZIndex = 6
+        makeCorner(halo, 999)
+        halo.Parent = rbPanel
+        local har = Instance.new("UIAspectRatioConstraint")
+        har.Parent = halo
+        local holder = Instance.new("Frame")
+        holder.AnchorPoint = Vector2.new(0.5, 0.5)
+        holder.Position = UDim2.fromScale(0.83, 0.33)
+        holder.Size = UDim2.fromScale(0.34, 0.6)
+        holder.BackgroundTransparency = 1
+        holder.ZIndex = 7
+        holder.Parent = rbPanel
+        setPetViewport(newPetViewport(holder, 7), "Phenix", "Divin")
+        for i, pos in ipairs({ { 0.66, 0.1 }, { 0.95, 0.14 }, { 0.93, 0.5 }, { 0.68, 0.52 }, { 0.97, 0.32 } }) do
+            text({ Text = "\u{2726}", Position = UDim2.fromScale(pos[1], pos[2]), Size = UDim2.fromScale(0.035, 0.06), TextColor3 = (i % 2 == 0) and WHITE or Color3.fromRGB(255, 220, 120) }, 1)
+        end
+        text({
+            Text = "\"RENAIS DE TES CENDRES !\"", Position = UDim2.fromScale(0.53, 0.37), Size = UDim2.fromScale(0.17, 0.12),
+            Rotation = -4, TextWrapped = true, TextColor3 = Color3.fromRGB(255, 215, 90),
+        }, 2)
+
+        -- gros bouton arrondi
         local go = Instance.new("TextButton")
-        go.LayoutOrder = 6
-        go.Size = UDim2.new(1, -10, 0, 44)
-        go.BackgroundColor3 = ready and Color3.fromRGB(60, 180, 90) or Color3.fromRGB(70, 70, 85)
-        go.Text = ready and "\u{1F504} Renaitre maintenant !" or "Pas encore pret"
-        go.TextColor3 = WHITE
-        go.Font = Enum.Font.GothamBold
-        go.TextSize = 18
-        go.AutoButtonColor = ready
-        go.ZIndex = 6
-        makeCorner(go, 10)
-        go.Parent = rbScroll
+        go.Position = UDim2.fromScale(0.56, 0.68)
+        go.Size = UDim2.fromScale(0.4, 0.21)
+        go.Text = ""
+        go.AutoButtonColor = false
+        go.BackgroundColor3 = WHITE
+        go.ZIndex = 7
+        makeCorner(go, 999)
+        go.Parent = rbPanel
+        local gs = Instance.new("UIStroke")
+        gs.Color = INK
+        gs.Thickness = 4
+        gs.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+        gs.Parent = go
+        rbUI.goGrad = gradient(go, WHITE, WHITE)
+        rbUI.goText = text({ Position = UDim2.fromScale(0.08, 0.2), Size = UDim2.fromScale(0.84, 0.6), ZIndex = 8 }, 3)
+        rbUI.goText.Parent = go
+        rbUI.go = go
         go.MouseButton1Click:Connect(function()
-            if not ready then return end
+            local okNpc, okCoins = rebirthChecks()
+            if not (okNpc and okCoins) then return end
             rbPanel.Visible = false
             RebirthRemote:FireServer()
         end)
+    end
+    buildRb()   -- tout de suite : le cadre est en place avant la premiere ouverture
+
+    local function coinsText()
+        return fmtNum(rebirthInfo.cost or 0) .. " coins"
+    end
+
+    local function refreshRebirth()
+        if not rbUI.go then buildRb() end
+        local lvl = state.rebirthLevel or 0
+        local okNpc, okCoins = rebirthChecks()
+        local ready = okNpc and okCoins
+        local GREEN, RED = Color3.fromRGB(120, 255, 140), Color3.fromRGB(255, 110, 110)
+        rbSig = table.concat({ lvl, rebirthInfo.done or 0, rebirthInfo.needed or 0, rebirthInfo.cost or 0, tostring(okCoins) }, "|")
+        rbUI.gain.Text = "+50 % de coins"
+        rbUI.gainSub.Text = "et +1 pet équipé toutes les 2 renaissances"
+        rbUI.badge.Text = "x" .. (1 + (lvl + 1) * 0.5)
+        rbUI.have.Text = lvl .. ((lvl > 1) and " renaissances" or " renaissance")
+        rbUI.haveSub.Text = "tes gains actuels : x" .. (1 + lvl * 0.5)
+        rbCoinsLine = rbUI.cost
+        rbUI.cost.Text = coinsText()
+        rbUI.cost.TextColor3 = okCoins and GREEN or RED
+        rbUI.costSub.Text = (okNpc and "\u{2705}" or "\u{274C}") .. " et battre tes dresseurs (" .. (rebirthInfo.done or 0) .. "/" .. (rebirthInfo.needed or 0) .. ")"
+        rbUI.costSub.TextColor3 = okNpc and GREEN or RED
+        rbUI.goGrad.Color = ready and ColorSequence.new(Color3.fromRGB(255, 235, 110), Color3.fromRGB(255, 130, 40))
+            or ColorSequence.new(Color3.fromRGB(120, 115, 135), Color3.fromRGB(70, 65, 85))
+        rbUI.goText.Text = ready and "RENAISSANCE" or "PAS ENCORE PRÊT"
     end
 
     onRebirthInfo = function()
