@@ -2887,8 +2887,8 @@ do
         frameStroke.Parent = rbPanel
         for _, top in ipairs({ true, false }) do
             local row = Instance.new("Frame")
-            row.Position = top and UDim2.new(0, 16, 0, -7) or UDim2.new(0, 16, 1, 1)
-            row.Size = UDim2.new(1, -32, 0, 6)
+            row.Position = top and UDim2.new(0, 20, 0, -8) or UDim2.new(0, 20, 1, 0)
+            row.Size = UDim2.new(1, -40, 0, 8)
             row.BackgroundTransparency = 1
             row.ZIndex = 8
             row.Parent = rbPanel
@@ -2897,12 +2897,12 @@ do
             rl.HorizontalFlex = Enum.UIFlexAlignment.SpaceEvenly
             rl.VerticalAlignment = Enum.VerticalAlignment.Center
             rl.Parent = row
-            for _ = 1, 26 do
+            for _ = 1, 20 do
                 local stud = Instance.new("Frame")
-                stud.Size = UDim2.new(0, 5, 0, 5)
+                stud.Size = UDim2.new(0, 8, 0, 8)
                 stud.BackgroundColor3 = Color3.fromRGB(255, 205, 110)
                 stud.ZIndex = 8
-                makeCorner(stud, 2)
+                makeCorner(stud, 4)
                 stud.Parent = row
             end
         end
@@ -3664,15 +3664,15 @@ do
         end
         for _, y in ipairs({ -6, 0 }) do
             local studs = new("Frame", {
-                Position = (y < 0) and UDim2.new(0, 10, 0, -6) or UDim2.new(0, 10, 1, 0),
-                Size = UDim2.new(1, -20, 0, 6), BackgroundTransparency = 1, ZIndex = 8,
+                Position = (y < 0) and UDim2.new(0, 14, 0, -7) or UDim2.new(0, 14, 1, -1),
+                Size = UDim2.new(1, -28, 0, 8), BackgroundTransparency = 1, ZIndex = 8,
             }, questPanel)
             new("UIListLayout", {
                 FillDirection = Enum.FillDirection.Horizontal, HorizontalFlex = Enum.UIFlexAlignment.SpaceEvenly,
                 VerticalAlignment = Enum.VerticalAlignment.Center,
             }, studs)
-            for _ = 1, 22 do
-                makeCorner(new("Frame", { Size = UDim2.new(0, 5, 0, 5), BackgroundColor3 = Color3.fromRGB(16, 70, 150), ZIndex = 8 }, studs), 1)
+            for _ = 1, 18 do
+                makeCorner(new("Frame", { Size = UDim2.new(0, 8, 0, 8), BackgroundColor3 = Color3.fromRGB(16, 70, 150), ZIndex = 8 }, studs), 4)
             end
         end
         local bigTitle = new("TextLabel", {

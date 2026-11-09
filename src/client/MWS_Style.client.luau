@@ -282,7 +282,7 @@ local function legoItem(item)
 	if item.AbsoluteSize.X < 40 or item.AbsoluteSize.Y < 24 then return end
 	item:SetAttribute("MWS_Lego", true)
 	-- pas de plots par-dessus l'image d'un pet
-	if not item:FindFirstChildWhichIsA("ViewportFrame", true) then studTexture(item, 18, 0.86) end
+	if not item:FindFirstChildWhichIsA("ViewportFrame", true) then studTexture(item, 24, 0.86) end
 	local hasBorder = false
 	for _, child in ipairs(item:GetChildren()) do
 		if child:IsA("UIStroke") and child.ApplyStrokeMode == Enum.ApplyStrokeMode.Border then hasBorder = true end
@@ -304,26 +304,42 @@ local function legoPanel(frame)
 		if child:IsA("UIStroke") and child.ApplyStrokeMode == Enum.ApplyStrokeMode.Border then border = child end
 	end
 	border = border or new("UIStroke", { ApplyStrokeMode = Enum.ApplyStrokeMode.Border, LineJoinMode = Enum.LineJoinMode.Round }, frame)
-	border.Color = accent
-	border.Thickness = 7 * LINE
-	-- rangees de plots clairs posees sur le cadre, en haut et en bas
+	local band = 10 * LINE   -- epaisseur du cadre (il est dessine a l'exterieur du menu)
+	border.Color = WHITE
+	border.Thickness = band
+	-- cadre en relief, comme une brique : plus clair en haut, plus fonce en bas
+	new("UIGradient", { Rotation = 90, Color = ColorSequence.new(accent:Lerp(WHITE, 0.3), accent:Lerp(BLACK, 0.3)) }, border)
+	-- fin reflet clair qui suit l'interieur du cadre
+	local inner = new("Frame", {
+		Name = "MWS_LegoInner", BackgroundTransparency = 1, ZIndex = frame.ZIndex + 3,
+		Position = UDim2.fromOffset(2, 2), Size = UDim2.new(1, -4, 1, -4),
+	}, frame)
+	new("UICorner", { CornerRadius = cornerOf(frame) }, inner)
+	new("UIStroke", {
+		Color = accent:Lerp(WHITE, 0.6), Thickness = 1.5 * LINE, Transparency = 0.35, ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
+	}, inner)
+	-- rangees de gros plots ronds en relief, centrees sur le cadre, en haut et en bas
+	local stud = 8 * LINE
+	local count = math.clamp(math.floor(frame.AbsoluteSize.X / 30), 10, 26)
+	if frame.AbsoluteSize.X < 1 then count = 16 end
 	for _, top in ipairs({ true, false }) do
 		local row = new("Frame", {
 			Name = "MWS_LegoRow", BackgroundTransparency = 1, ZIndex = frame.ZIndex + 3,
-			Position = top and UDim2.new(0, 16, 0, -6 * LINE) or UDim2.new(0, 16, 1, 1),
-			Size = UDim2.new(1, -32, 0, 5 * LINE),
+			Position = top and UDim2.new(0, 22, 0, -band / 2 - stud / 2) or UDim2.new(0, 22, 1, band / 2 - stud / 2),
+			Size = UDim2.new(1, -44, 0, stud),
 		}, frame)
 		new("UIListLayout", {
 			FillDirection = Enum.FillDirection.Horizontal, HorizontalFlex = Enum.UIFlexAlignment.SpaceEvenly,
 			VerticalAlignment = Enum.VerticalAlignment.Center,
 		}, row)
-		for _ = 1, 22 do
-			new("UICorner", { CornerRadius = UDim.new(1, 0) }, new("Frame", {
-				Size = UDim2.fromOffset(5 * LINE, 5 * LINE), BackgroundColor3 = accent:Lerp(WHITE, 0.55), ZIndex = frame.ZIndex + 3,
-			}, row))
+		for _ = 1, count do
+			local s = new("Frame", { Size = UDim2.fromOffset(stud, stud), BackgroundColor3 = WHITE, ZIndex = frame.ZIndex + 3 }, row)
+			new("UICorner", { CornerRadius = UDim.new(1, 0) }, s)
+			new("UIGradient", { Rotation = 90, Color = ColorSequence.new(accent:Lerp(WHITE, 0.75), accent:Lerp(WHITE, 0.15)) }, s)
+			new("UIStroke", { Color = accent:Lerp(BLACK, 0.5), Thickness = LINE, ApplyStrokeMode = Enum.ApplyStrokeMode.Border }, s)
 		end
 	end
-	studTexture(frame, 30, 0.8, accent)
+	studTexture(frame, 40, 0.8, accent)
 	-- titre : degrade blanc vers la couleur du menu
 	for _, child in ipairs(frame:GetChildren()) do
 		if child:IsA("TextLabel") and child.Text ~= "" then
