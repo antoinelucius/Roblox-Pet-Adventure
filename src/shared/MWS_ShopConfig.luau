@@ -12,7 +12,7 @@
 -- Options d'un article :
 --   world = N  -> l'article n'apparait et ne s'achete QUE quand le joueur est dans le monde N
 --   limit = N  -> nombre maximum d'achats par joueur (1 = un seul achat a vie)
---   model      -> image 3D de ReplicatedStorage.MWS_ShopIcons (sinon l'icone est affichee)
+--   model      -> objet 3D en briques de MWS_ShopCards, et nom de son image dans Config.Images
 --   section    -> partie de la boutique : "coins", "boosts", "trails" ou "passes"
 -- Recompenses possibles (reward.type) :
 --   coins     -> { type = "coins", amount = 10000 }
@@ -97,6 +97,26 @@ Config.Items = {
 		icon = "\u{1F451}", name = "Gains x2", desc = "Double les revenus de tes pets et les cristaux, a vie",
 		reward = { type = "coinsmult", mult = 2 },
 	},
+}
+
+-- ============================================================
+-- IMAGES DES ARTICLES (c'est ICI que tu colles les ID de tes images)
+-- ============================================================
+-- Les images sont dans le dossier assets/shop du depot (un fichier .png par ligne ci-dessous).
+-- Une fois l'image envoyee sur Roblox, colle son ID entre les guillemets : "rbxassetid://123456789"
+-- A gauche : le "model" de l'article, sinon sa "key".
+-- Tant qu'une ligne reste "", l'article garde son objet 3D en briques.
+Config.Images = {
+	Cash1         = "", -- Cash1.png         : Pack de pieces S
+	Cash2         = "", -- Cash2.png         : Pack de pieces M
+	Cash3         = "", -- Cash3.png         : Pack de pieces L
+	PotionLuck    = "", -- PotionLuck.png    : potions de chance (x1, x3, x10 et inventaire)
+	PotionSpeed   = "", -- PotionSpeed.png   : potions de vitesse (x1, x3, x10 et inventaire)
+	trail_flammes = "", -- trail_flammes.png : Trainee de flammes
+	trail_sakura  = "", -- trail_sakura.png  : Trainee de cerisier
+	trail_cosmos  = "", -- trail_cosmos.png  : Trainee cosmique
+	trail_magma   = "", -- trail_magma.png   : Trainee de magma
+	pass_x2       = "", -- pass_x2.png       : Gains x2
 }
 
 -- Potions gardees dans l'inventaire du joueur : il choisit quand les utiliser

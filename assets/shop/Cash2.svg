@@ -1,0 +1,49 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" fill="none">
+  <defs>
+    <linearGradient id="gold" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#FFF08A"/><stop offset="0.55" stop-color="#FFC928"/><stop offset="1" stop-color="#F08A00"/></linearGradient>
+    <linearGradient id="goldIn" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#FFD84A"/><stop offset="1" stop-color="#FFAE1A"/></linearGradient>
+    <linearGradient id="bolt" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#FFF7A6"/><stop offset="0.5" stop-color="#FFD62E"/><stop offset="1" stop-color="#FF9A1F"/></linearGradient>
+    <linearGradient id="leaf" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#8CF06A"/><stop offset="1" stop-color="#1FA84A"/></linearGradient>
+    <linearGradient id="egg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#C79BFF"/><stop offset="0.6" stop-color="#8A4DF0"/><stop offset="1" stop-color="#5A27B8"/></linearGradient>
+    <linearGradient id="cyan" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#6FE9FF" stop-opacity="0"/><stop offset="1" stop-color="#6FE9FF"/></linearGradient>
+    <linearGradient id="sack" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#E9BC78"/><stop offset="1" stop-color="#B57A34"/></linearGradient>
+    <linearGradient id="wood" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#D08A3C"/><stop offset="1" stop-color="#8C4A18"/></linearGradient>
+    <linearGradient id="glass" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#F4FBFF"/><stop offset="1" stop-color="#BFDDF2"/></linearGradient>
+    <linearGradient id="liqLuck" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#FFC04A"/><stop offset="1" stop-color="#F26A12"/></linearGradient>
+    <linearGradient id="liqSpeed" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#6FD2FF"/><stop offset="1" stop-color="#1F6FE8"/></linearGradient>
+    <linearGradient id="flame" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#FFD23A"/><stop offset="1" stop-color="#F0401A"/></linearGradient>
+    <linearGradient id="badge" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#FF6FB1"/><stop offset="1" stop-color="#E0206F"/></linearGradient>
+  </defs>
+
+  
+  <g>
+    <circle cx="110" cy="413.58" r="62" fill="#B85C00" stroke="#1B1630" stroke-width="10"/>
+    <circle cx="110" cy="408" r="62" fill="url(#gold)" stroke="#1B1630" stroke-width="10"/>
+    <circle cx="110" cy="408" r="44.64" fill="url(#goldIn)" stroke="#C97A00" stroke-width="6"/>
+    <polygon points="110.0,381.3 117.7,399.3 137.1,401.0 122.4,413.9 126.8,432.9 110.0,422.9 93.2,432.9 97.6,413.9 82.9,401.0 102.3,399.3" fill="#FFF3B0" stroke="#C97A00" stroke-width="5" stroke-linejoin="round"/>
+    <path d="M71.56 381.96 A48.36 48.36 0 0 1 103.8 358.4" stroke="#FFFFFF" stroke-opacity="0.85" stroke-width="9" stroke-linecap="round"/>
+  </g>
+  
+  <g>
+    <circle cx="410" cy="406.12" r="68" fill="#B85C00" stroke="#1B1630" stroke-width="10"/>
+    <circle cx="410" cy="400" r="68" fill="url(#gold)" stroke="#1B1630" stroke-width="10"/>
+    <circle cx="410" cy="400" r="48.96" fill="url(#goldIn)" stroke="#C97A00" stroke-width="6"/>
+    <polygon points="410.0,370.8 418.4,390.5 439.7,392.4 423.6,406.5 428.4,427.3 410.0,416.3 391.6,427.3 396.4,406.5 380.3,392.4 401.6,390.5" fill="#FFF3B0" stroke="#C97A00" stroke-width="5" stroke-linejoin="round"/>
+    <path d="M367.84000000000003 371.44 A53.04 53.04 0 0 1 403.2 345.6" stroke="#FFFFFF" stroke-opacity="0.85" stroke-width="9" stroke-linecap="round"/>
+  </g>
+  <path d="M190 150 C160 104 176 58 214 74 C232 44 280 44 298 74 C336 58 352 104 322 150Z" fill="url(#sack)" stroke="#1B1630" stroke-width="14" stroke-linejoin="round" stroke-linecap="round"/>
+  <path d="M256 136 C140 180 84 290 84 366 C84 446 164 480 256 480 C348 480 428 446 428 366 C428 290 372 180 256 136Z" fill="url(#sack)" stroke="#1B1630" stroke-width="16" stroke-linejoin="round" stroke-linecap="round"/>
+  <path d="M136 400 C160 448 220 462 256 462 C330 462 398 436 410 366" stroke="#8F5A20" stroke-opacity="0.55" stroke-width="18" stroke-linecap="round"/>
+  <path d="M132 318 C140 262 176 214 214 190" stroke="#FFFFFF" stroke-opacity="0.7" stroke-width="16" stroke-linecap="round"/>
+  <rect x="176" y="132" width="160" height="40" rx="20" fill="#E0206F" stroke="#1B1630" stroke-width="12" stroke-linejoin="round" stroke-linecap="round"/>
+  
+  <g>
+    <circle cx="256" cy="329.56" r="84" fill="#B85C00" stroke="#1B1630" stroke-width="11"/>
+    <circle cx="256" cy="322" r="84" fill="url(#gold)" stroke="#1B1630" stroke-width="11"/>
+    <circle cx="256" cy="322" r="60.48" fill="url(#goldIn)" stroke="#C97A00" stroke-width="6.6"/>
+    <polygon points="256.0,285.9 266.4,310.2 292.7,312.6 272.8,330.0 278.7,355.8 256.0,342.2 233.3,355.8 239.2,330.0 219.3,312.6 245.6,310.2" fill="#FFF3B0" stroke="#C97A00" stroke-width="5.5" stroke-linejoin="round"/>
+    <path d="M203.92000000000002 286.72 A65.52 65.52 0 0 1 247.6 254.8" stroke="#FFFFFF" stroke-opacity="0.85" stroke-width="9.9" stroke-linecap="round"/>
+  </g>
+  <path d="M436 74 Q442.12 101.88 470 108 Q442.12 114.12 436 142 Q429.88 114.12 402 108 Q429.88 101.88 436 74Z" fill="#FFFFFF" stroke="#1B1630" stroke-width="6" stroke-linejoin="round"/>
+  <path d="M70 126 Q74.32 145.68 94 150 Q74.32 154.32 70 174 Q65.68 154.32 46 150 Q65.68 145.68 70 126Z" fill="#FFF3B0" stroke="#1B1630" stroke-width="6" stroke-linejoin="round"/>
+</svg>

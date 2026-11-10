@@ -1,7 +1,9 @@
 -- MWS_ShopCards (client) : les cartes de la boutique.
--- Chaque article est montre par un petit objet 3D en briques (billets, coffre, potions, trainees,
--- couronne) construit ici : il est toujours entier et la camera le cadre automatiquement au centre
--- de sa case, quelle que soit sa forme. Sinon (article inconnu), son icone est affichee.
+-- Chaque article est montre par son image (ID colle dans MWS_ShopConfig.Images : image carree,
+-- entiere, affichee au centre de sa case). Tant que l'ID n'est pas renseigne, il est montre par un
+-- petit objet 3D en briques (billets, coffre, potions, trainees, couronne) construit ici : il est
+-- toujours entier et la camera le cadre automatiquement au centre de sa case, quelle que soit sa
+-- forme. Sinon (article inconnu), son icone est affichee.
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Config = require(ReplicatedStorage:WaitForChild("MWS_ShopConfig"))
 
@@ -107,6 +109,16 @@ local function builderFor(item)
 	return nil
 end
 
+-- image de l'article : cherchee par son "model", sinon par sa "key" (nil si l'ID n'est pas renseigne)
+local function imageFor(item)
+	local images = Config.Images or {}
+	for _, name in ipairs({ item.model or false, item.key or false }) do
+		local id = name and images[name]
+		if type(id) == "string" and id ~= "" then return id end
+	end
+	return nil
+end
+
 -- objet 3D dans une case carree ; la camera le cadre au centre, entier
 local function viewport(parent, build, z)
 	local view = Instance.new("ViewportFrame")
@@ -187,8 +199,20 @@ function Cards.card(parent, item, section, order, onClick)
 	dc.CornerRadius = UDim.new(1, 0)
 	dc.Parent = disk
 	disk.Parent = card
+	local picture = imageFor(item)
 	local build = builderFor(item)
-	if build then
+	if picture then
+		-- image carree (512 x 512, fond transparent) : entiere et centree sur le socle
+		local image = Instance.new("ImageLabel")
+		image.AnchorPoint = Vector2.new(0.5, 0.5)
+		image.Position = UDim2.new(0.5, 0, 0, 58)
+		image.Size = UDim2.fromOffset(104, 104)
+		image.BackgroundTransparency = 1
+		image.Image = picture
+		image.ScaleType = Enum.ScaleType.Fit
+		image.ZIndex = 8
+		image.Parent = card
+	elseif build then
 		local view = viewport(card, build, 8)
 		view.AnchorPoint = Vector2.new(0.5, 0.5)
 		view.Position = UDim2.new(0.5, 0, 0, 58)
