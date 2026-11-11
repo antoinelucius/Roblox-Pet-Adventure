@@ -109,6 +109,233 @@ local function makeCorner(parent, radius)
 end
 
 -- ============================================================
+-- ANIMATIONS : boite a outils (tweens, zoom, secousses, textes flottants)
+-- ============================================================
+
+local RunService = game:GetService("RunService")
+
+-- Mets false pour garder la camera normale pendant les combats
+local BATTLE_CAMERA = true
+
+local function fmtInt(n)
+    return ((tostring(math.floor(n or 0)):reverse():gsub("(%d%d%d)", "%1 "):reverse():gsub("^%s+", "")))
+end
+
+local Anim = {}
+Anim.FAST = TweenInfo.new(0.12, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+Anim.SOFT = TweenInfo.new(0.28, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+Anim.BOUNCY = TweenInfo.new(0.35, Enum.EasingStyle.Back, Enum.EasingDirection.Out)
+Anim.live = setmetatable({}, { __mode = "k" })
+Anim.home = setmetatable({}, { __mode = "k" })
+Anim.token = setmetatable({}, { __mode = "k" })
+Anim.opened = {}
+
+function Anim.info(time, style, dir, delay, repeatCount, reverses)
+    return TweenInfo.new(time, style or Enum.EasingStyle.Quad, dir or Enum.EasingDirection.Out, repeatCount or 0, reverses or false, delay or 0)
+end
+
+-- joue un tween en annulant le precedent sur le meme element (evite qu'ils se battent)
+function Anim.play(inst, info, props, key)
+    key = key or "main"
+    local slot = Anim.live[inst]
+    if not slot then
+        slot = {}
+        Anim.live[inst] = slot
+    end
+    if slot[key] then slot[key]:Cancel() end
+    local tw = TweenService:Create(inst, info, props)
+    slot[key] = tw
+    tw:Play()
+    return tw
+end
+
+-- UIScale dedie aux animations de zoom
+function Anim.scale(guiObject)
+    local s = guiObject:FindFirstChild("AnimScale")
+    if not s then
+        s = Instance.new("UIScale")
+        s.Name = "AnimScale"
+        s.Parent = guiObject
+    end
+    return s
+end
+
+-- place le point d'ancrage au centre sans deplacer l'element (pour zoomer depuis le centre)
+function Anim.center(guiObject)
+    local a = guiObject.AnchorPoint
+    if a.X == 0.5 and a.Y == 0.5 then return guiObject end
+    local s, p = guiObject.Size, guiObject.Position
+    guiObject.AnchorPoint = Vector2.new(0.5, 0.5)
+    guiObject.Position = UDim2.new(
+        p.X.Scale + s.X.Scale * (0.5 - a.X), p.X.Offset + s.X.Offset * (0.5 - a.X),
+        p.Y.Scale + s.Y.Scale * (0.5 - a.Y), p.Y.Offset + s.Y.Offset * (0.5 - a.Y))
+    return guiObject
+end
+
+-- petit "pop" : l'element apparait a l'echelle from puis revient a 1 avec un rebond
+function Anim.pop(guiObject, from, time, delay)
+    local s = Anim.scale(guiObject)
+    s.Scale = from or 1.25
+    Anim.play(s, Anim.info(time or 0.3, Enum.EasingStyle.Back, nil, delay), { Scale = 1 }, "scale")
+end
+
+-- survol / appui : le bouton grossit, s'ecrase puis rebondit
+function Anim.button(btn)
+    if btn:GetAttribute("AnimReady") then return btn end
+    btn:SetAttribute("AnimReady", true)
+    local s = Anim.scale(btn)
+    btn.MouseEnter:Connect(function() Anim.play(s, Anim.FAST, { Scale = 1.06 }, "scale") end)
+    btn.MouseLeave:Connect(function() Anim.play(s, Anim.FAST, { Scale = 1 }, "scale") end)
+    btn.MouseButton1Down:Connect(function() Anim.play(s, Anim.FAST, { Scale = 0.9 }, "scale") end)
+    btn.MouseButton1Up:Connect(function() Anim.play(s, Anim.BOUNCY, { Scale = 1 }, "scale") end)
+    return btn
+end
+
+-- ouverture / fermeture animee d'un panneau
+function Anim.show(p)
+    Anim.opened[p] = true
+    p.Visible = true
+    local s = Anim.scale(p)
+    s.Scale = 0.75
+    Anim.play(s, Anim.BOUNCY, { Scale = 1 }, "scale")
+end
+
+function Anim.hide(p)
+    if not Anim.opened[p] then return end
+    Anim.opened[p] = nil
+    local tw = Anim.play(Anim.scale(p), Anim.info(0.14, Enum.EasingStyle.Quad, Enum.EasingDirection.In), { Scale = 0.75 }, "scale")
+    tw.Completed:Connect(function(playbackState)
+        if playbackState == Enum.PlaybackState.Completed and not Anim.opened[p] then
+            p.Visible = false
+        end
+    end)
+end
+
+-- renvoie true si le panneau vient d'etre ouvert
+function Anim.toggle(p)
+    if Anim.opened[p] then
+        Anim.hide(p)
+        return false
+    end
+    Anim.show(p)
+    return true
+end
+
+-- secousse qui s'attenue (l'element doit avoir une position fixe)
+function Anim.shake(guiObject, power, time)
+    local home = Anim.home[guiObject]
+    if not home then
+        home = guiObject.Position
+        Anim.home[guiObject] = home
+    end
+    local id = (Anim.token[guiObject] or 0) + 1
+    Anim.token[guiObject] = id
+    task.spawn(function()
+        local t0 = os.clock()
+        while os.clock() - t0 < time and Anim.token[guiObject] == id and guiObject.Parent do
+            local k = 1 - (os.clock() - t0) / time
+            guiObject.Position = home + UDim2.fromOffset((math.random() - 0.5) * 2 * power * k, (math.random() - 0.5) * 2 * power * k)
+            RunService.RenderStepped:Wait()
+        end
+        if Anim.token[guiObject] == id then guiObject.Position = home end
+    end)
+end
+
+-- contour (stroke) autour d'un cadre, ou autour du texte si onText = true
+function Anim.stroke(parent, color, thickness, transparency, onText)
+    local s = Instance.new("UIStroke")
+    s.Color = color
+    s.Thickness = thickness or 2
+    s.Transparency = transparency or 0
+    s.ApplyStrokeMode = onText and Enum.ApplyStrokeMode.Contextual or Enum.ApplyStrokeMode.Border
+    s.Parent = parent
+    return s
+end
+
+-- texte qui jaillit, monte puis s'efface (degats, gains de coins...)
+function Anim.floatText(parent, text, color, pos, size, z)
+    local l = Instance.new("TextLabel")
+    l.AnchorPoint = Vector2.new(0.5, 0.5)
+    l.Position = pos
+    l.Size = UDim2.fromOffset(260, size + 12)
+    l.BackgroundTransparency = 1
+    l.Text = text
+    l.TextColor3 = color
+    l.Font = Enum.Font.GothamBlack
+    l.TextSize = size
+    l.ZIndex = z or 30
+    local st = Anim.stroke(l, Color3.fromRGB(0, 0, 0), 2, 0, true)
+    l.Parent = parent
+    Anim.pop(l, 0.3, 0.25)
+    TweenService:Create(l, Anim.info(0.95), { Position = pos + UDim2.fromOffset(math.random(-24, 24), -64) }):Play()
+    TweenService:Create(l, Anim.info(0.35, Enum.EasingStyle.Linear, nil, 0.6), { TextTransparency = 1 }):Play()
+    TweenService:Create(st, Anim.info(0.35, Enum.EasingStyle.Linear, nil, 0.6), { Transparency = 1 }):Play()
+    task.delay(1.05, function() l:Destroy() end)
+    return l
+end
+
+-- compteur anime : le nombre defile de from a to
+function Anim.count(label, from, to, time, format)
+    local id = (Anim.token[label] or 0) + 1
+    Anim.token[label] = id
+    if from == to or time <= 0 then
+        label.Text = format(to)
+        return
+    end
+    task.spawn(function()
+        local t0 = os.clock()
+        while os.clock() - t0 < time and Anim.token[label] == id and label.Parent do
+            local k = (os.clock() - t0) / time
+            k = 1 - (1 - k) * (1 - k)
+            label.Text = format(from + (to - from) * k)
+            RunService.RenderStepped:Wait()
+        end
+        if Anim.token[label] == id then label.Text = format(to) end
+    end)
+end
+
+-- rayons lumineux tournants (victoire, eclosion, renaissance)
+function Anim.rays(parent, position, z)
+    local holder = Instance.new("Frame")
+    holder.Name = "Rays"
+    holder.AnchorPoint = Vector2.new(0.5, 0.5)
+    holder.Position = position
+    holder.Size = UDim2.fromOffset(10, 10)
+    holder.BackgroundTransparency = 1
+    holder.Visible = false
+    holder.ZIndex = z
+    for i = 1, 8 do
+        local ray = Instance.new("Frame")
+        ray.AnchorPoint = Vector2.new(0.5, 0.5)
+        ray.Position = UDim2.fromScale(0.5, 0.5)
+        ray.Size = UDim2.fromOffset(900, 34)
+        ray.Rotation = (i - 1) * 22.5
+        ray.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+        ray.BackgroundTransparency = 0.55
+        ray.BorderSizePixel = 0
+        ray.ZIndex = z
+        local g = Instance.new("UIGradient")
+        g.Transparency = NumberSequence.new({
+            NumberSequenceKeypoint.new(0, 1), NumberSequenceKeypoint.new(0.5, 0), NumberSequenceKeypoint.new(1, 1)
+        })
+        g.Parent = ray
+        ray.Parent = holder
+    end
+    holder.Parent = parent
+    TweenService:Create(holder, TweenInfo.new(9, Enum.EasingStyle.Linear, Enum.EasingDirection.InOut, -1), { Rotation = 360 }):Play()
+    return holder
+end
+
+function Anim.setRays(holder, color, visible)
+    holder.Visible = visible
+    if not visible then return end
+    for _, ray in ipairs(holder:GetChildren()) do
+        if ray:IsA("Frame") then ray.BackgroundColor3 = color end
+    end
+    Anim.pop(holder, 0.1, 0.5)
+end
+
+-- ============================================================
 -- GUI
 -- ============================================================
 
@@ -703,15 +930,183 @@ hatchImage.ZIndex = 11
 hatchImage.Parent = hatchFrame
 
 -- ============================================================
+-- ELEMENTS D'ANIMATION (boutons, bandeaux, flash d'ecran, rayons)
+-- ============================================================
+
+-- tous les boutons reagissent au survol et a l'appui ; les panneaux zooment depuis leur centre
+for _, b in ipairs({ invButton, eggButton, combatButton, rebirthButton, closeButton, eggCloseBtn, combatCloseBtn,
+    attackBtn, special1Btn, special2Btn, special3Btn, switchBtn, fleeBtn }) do
+    Anim.center(b)
+    Anim.button(b)
+end
+for _, p in ipairs({ panel, eggPanel, combatPanel, battlePanel, coinIcon, playerPetIcon, npcPetIcon, chargeBarBg, hatchLabel, hatchImage }) do
+    Anim.center(p)
+end
+
+local BUI = {}
+BUI.panelHome = battlePanel.Position
+BUI.frame = { player = playerPetFrame, npc = npcPetFrame }
+BUI.bar = { player = playerHpBar, npc = npcHpBar }
+BUI.hpText = { player = playerHpText, npc = npcHpText }
+BUI.icon = { player = playerPetIcon, npc = npcPetIcon }
+BUI.sideColor = { player = Color3.fromRGB(120, 255, 140), npc = Color3.fromRGB(255, 110, 110) }
+BUI.frameStroke = {
+    player = Anim.stroke(playerPetFrame, BUI.sideColor.player, 3, 1),
+    npc = Anim.stroke(npcPetFrame, BUI.sideColor.npc, 3, 1),
+}
+
+-- trainee blanche derriere les barres de vie (montre les PV qui viennent d'etre perdus)
+BUI.ghost = {}
+for side, bar in pairs(BUI.bar) do
+    local g = Instance.new("Frame")
+    g.Name = "Ghost"
+    g.Size = UDim2.new(1, 0, 1, 0)
+    g.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+    g.BackgroundTransparency = 0.2
+    g.BorderSizePixel = 0
+    g.ZIndex = bar.ZIndex
+    makeCorner(g, 4)
+    g.Parent = bar.Parent
+    bar.ZIndex = bar.ZIndex + 1
+    BUI.ghost[side] = g
+end
+
+-- halo pulsant : attaques speciales disponibles, charge au maximum, renaissance prete
+BUI.glow = {}
+for _, btn in ipairs({ special1Btn, special2Btn, special3Btn, rebirthButton, chargeBarBg }) do
+    local st = Anim.stroke(btn, Color3.fromRGB(255, 255, 255), 3, 0.05)
+    st.Enabled = btn == rebirthButton
+    TweenService:Create(st, TweenInfo.new(0.55, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1, true), { Transparency = 0.8 }):Play()
+    BUI.glow[btn] = st
+end
+BUI.glow[chargeBarBg].Color = Color3.fromRGB(255, 230, 120)
+BUI.glow[rebirthButton].Color = Color3.fromRGB(230, 160, 255)
+
+-- annonce des attaques ("LAME DE FEU !", "COUP CRITIQUE !")
+BUI.banner = Instance.new("TextLabel")
+BUI.banner.AnchorPoint = Vector2.new(0.5, 0.5)
+BUI.banner.Position = UDim2.fromScale(0.5, 0.14)
+BUI.banner.Size = UDim2.fromOffset(800, 70)
+BUI.banner.BackgroundTransparency = 1
+BUI.banner.Text = ""
+BUI.banner.Font = Enum.Font.GothamBlack
+BUI.banner.TextSize = 46
+BUI.banner.TextTransparency = 1
+BUI.banner.ZIndex = 30
+BUI.banner.Parent = battleFrame
+BUI.bannerStroke = Anim.stroke(BUI.banner, Color3.fromRGB(0, 0, 0), 3, 1, true)
+
+-- flash plein ecran (impacts, eclosion, victoire)
+BUI.flash = Instance.new("Frame")
+BUI.flash.Name = "ScreenFlash"
+BUI.flash.Size = UDim2.fromScale(1, 1)
+BUI.flash.BackgroundTransparency = 1
+BUI.flash.BorderSizePixel = 0
+BUI.flash.Active = false
+BUI.flash.ZIndex = 45
+BUI.flash.Parent = gui
+
+-- resultat du combat (grand texte + rayons tournants)
+BUI.resultHome = UDim2.fromScale(0.5, 0.3)
+BUI.rays = Anim.rays(battleFrame, BUI.resultHome, 28)
+BUI.result = Instance.new("TextLabel")
+BUI.result.AnchorPoint = Vector2.new(0.5, 0.5)
+BUI.result.Position = BUI.resultHome
+BUI.result.Size = UDim2.fromOffset(900, 130)
+BUI.result.BackgroundTransparency = 1
+BUI.result.Text = ""
+BUI.result.Font = Enum.Font.GothamBlack
+BUI.result.TextSize = 96
+BUI.result.Visible = false
+BUI.result.ZIndex = 30
+BUI.result.Parent = battleFrame
+Anim.stroke(BUI.result, Color3.fromRGB(0, 0, 0), 4, 0, true)
+BUI.resultSub = Instance.new("TextLabel")
+BUI.resultSub.AnchorPoint = Vector2.new(0.5, 0.5)
+BUI.resultSub.Position = UDim2.new(0.5, 0, 0.3, 82)
+BUI.resultSub.Size = UDim2.fromOffset(800, 40)
+BUI.resultSub.BackgroundTransparency = 1
+BUI.resultSub.Text = ""
+BUI.resultSub.TextColor3 = Color3.fromRGB(255, 255, 255)
+BUI.resultSub.Font = Enum.Font.GothamBold
+BUI.resultSub.TextSize = 30
+BUI.resultSub.Visible = false
+BUI.resultSub.ZIndex = 30
+BUI.resultSub.Parent = battleFrame
+Anim.stroke(BUI.resultSub, Color3.fromRGB(0, 0, 0), 2, 0, true)
+
+-- bandeau d'introduction "JOUEUR  VS  DRESSEUR"
+for key, color in pairs({ vsLeft = BUI.sideColor.player, vsRight = BUI.sideColor.npc }) do
+    local card = Instance.new("TextLabel")
+    card.AnchorPoint = Vector2.new(0.5, 0.5)
+    card.Size = UDim2.fromOffset(340, 64)
+    card.BackgroundColor3 = Color3.fromRGB(20, 20, 30)
+    card.BackgroundTransparency = 0.1
+    card.Text = ""
+    card.TextColor3 = Color3.fromRGB(255, 255, 255)
+    card.Font = Enum.Font.GothamBlack
+    card.TextSize = 26
+    card.TextTruncate = Enum.TextTruncate.AtEnd
+    card.Visible = false
+    card.ZIndex = 29
+    makeCorner(card, 12)
+    Anim.stroke(card, color, 3, 0)
+    card.Parent = battleFrame
+    BUI[key] = card
+end
+BUI.vsMid = Instance.new("TextLabel")
+BUI.vsMid.AnchorPoint = Vector2.new(0.5, 0.5)
+BUI.vsMid.Position = UDim2.fromScale(0.5, 0.3)
+BUI.vsMid.Size = UDim2.fromOffset(160, 100)
+BUI.vsMid.BackgroundTransparency = 1
+BUI.vsMid.Text = "VS"
+BUI.vsMid.TextColor3 = Color3.fromRGB(255, 220, 80)
+BUI.vsMid.Font = Enum.Font.GothamBlack
+BUI.vsMid.TextSize = 84
+BUI.vsMid.Visible = false
+BUI.vsMid.ZIndex = 30
+BUI.vsMid.Parent = battleFrame
+Anim.stroke(BUI.vsMid, Color3.fromRGB(0, 0, 0), 4, 0, true)
+
+-- eclosion / renaissance : oeuf qui tremble, rayons, cadre de l'animal
+local Overlay = { id = 0 }
+hatchLabel.ZIndex = 12
+hatchLabel.TextStrokeTransparency = 0.3
+hatchImage.ZIndex = 12
+makeCorner(hatchImage, 24)
+Overlay.imgStroke = Anim.stroke(hatchImage, Color3.fromRGB(255, 255, 255), 4, 0)
+Overlay.rays = Anim.rays(hatchFrame, UDim2.new(0.5, 0, 0.5, -190), 11)
+Overlay.egg = Instance.new("TextLabel")
+Overlay.egg.AnchorPoint = Vector2.new(0.5, 0.5)
+Overlay.egg.Position = UDim2.new(0.5, 0, 0.5, -190)
+Overlay.egg.Size = UDim2.fromOffset(170, 170)
+Overlay.egg.BackgroundTransparency = 1
+Overlay.egg.Text = "\u{1F95A}"
+Overlay.egg.TextScaled = true
+Overlay.egg.Visible = false
+Overlay.egg.ZIndex = 12
+Overlay.egg.Parent = hatchFrame
+
+-- le bouton Renaissance surgit quand la renaissance devient possible
+local function setRebirthVisible(visible)
+    if visible and not rebirthButton.Visible then
+        rebirthButton.Visible = true
+        Anim.pop(rebirthButton, 0.3, 0.45)
+    elseif not visible then
+        rebirthButton.Visible = false
+    end
+end
+
+-- ============================================================
 -- PET PANEL LOGIC
 -- ============================================================
 
-local function refreshPanel()
+local function refreshPanel(animate)
     for _, child in ipairs(scrollFrame:GetChildren()) do
         if child:IsA("Frame") then child:Destroy() end
     end
 
-    for _, pet in ipairs(state.pets) do
+    for index, pet in ipairs(state.pets) do
         local card = Instance.new("Frame")
         card.Name = "PetCard" .. tostring(pet.id)
         card.BackgroundColor3 = RARITY_COLORS[pet.rarity] or Color3.fromRGB(100, 100, 100)
@@ -788,8 +1183,11 @@ local function refreshPanel()
         equipBtn.MouseButton1Click:Connect(function()
             EquipPet:FireServer(pet.id)
         end)
+        Anim.button(Anim.center(equipBtn))
 
         card.Parent = scrollFrame
+        -- a l'ouverture, les cartes surgissent l'une apres l'autre
+        if animate then Anim.pop(card, 0.5, 0.3, math.min(index, 14) * 0.025) end
     end
 end
 
@@ -797,18 +1195,19 @@ end
 -- EGG PANEL LOGIC
 -- ============================================================
 
-local function refreshEggPanel()
+local function refreshEggPanel(animate)
     for _, child in ipairs(eggScroll:GetChildren()) do
         if child:IsA("Frame") then child:Destroy() end
     end
 
-    for _, egg in ipairs(eggData) do
+    for eggIndex, egg in ipairs(eggData) do
         local section = Instance.new("Frame")
         section.Size = UDim2.new(1, 0, 0, 210)
         section.BackgroundColor3 = Color3.fromRGB(35, 35, 50)
         section.AutomaticSize = Enum.AutomaticSize.Y
         makeCorner(section, 12)
         section.Parent = eggScroll
+        if animate then Anim.pop(section, 0.7, 0.35, (eggIndex - 1) * 0.06) end
 
         local header = Instance.new("Frame")
         header.Size = UDim2.new(1, 0, 0, 50)
@@ -924,7 +1323,7 @@ end
 -- COMBAT PANEL LOGIC
 -- ============================================================
 
-local function refreshCombatPanel()
+local function refreshCombatPanel(animate)
     for _, child in ipairs(combatScroll:GetChildren()) do
         if child:IsA("Frame") then child:Destroy() end
     end
@@ -935,6 +1334,7 @@ local function refreshCombatPanel()
         row.BackgroundColor3 = npc.defeated and Color3.fromRGB(20, 50, 30) or Color3.fromRGB(50, 30, 30)
         makeCorner(row, 8)
         row.Parent = combatScroll
+        if animate then Anim.pop(row, 0.7, 0.3, math.min(i, 12) * 0.04) end
 
         local colorDot = Instance.new("Frame")
         colorDot.Size = UDim2.new(0, 40, 0, 40)
@@ -992,12 +1392,13 @@ local function refreshCombatPanel()
         makeCorner(fightBtn, 8)
         fightBtn.Parent = row
         fightBtn.MouseButton1Click:Connect(function()
-            combatPanel.Visible = false
+            Anim.hide(combatPanel)
             BattleRequest:FireServer(i)
         end)
+        Anim.button(Anim.center(fightBtn))
     end
 
-    rebirthButton.Visible = rebirthButton:GetAttribute("Ready") == true and #npcData > 0
+    setRebirthVisible(rebirthButton:GetAttribute("Ready") == true and #npcData > 0)
 end
 
 -- ============================================================
@@ -1006,6 +1407,388 @@ end
 
 local battleData = nil
 local battleSerial = 0
+local Battle = { seq = 0, applied = 0, shown = {}, avail = {}, unlocked = {}, ended = 0, waitId = 0, live = false }
+
+local ACTION_BUTTONS = { attackBtn, special1Btn, special2Btn, special3Btn, switchBtn }
+local SPECIALS = {
+    { btn = special1Btn, need = 0.5,  color = Color3.fromRGB(255, 100, 30) },   -- Lame de Feu
+    { btn = special2Btn, need = 0.75, color = Color3.fromRGB(80, 180, 255) },   -- Tempete Glace
+    { btn = special3Btn, need = 1.0,  color = Color3.fromRGB(255, 220, 80) },   -- Frappe Divine
+}
+local STYLE_NAMES = {
+    FireSlash = "LAME DE FEU !", IceStorm = "TEMPETE GLACE !",
+    DivineStrike = "FRAPPE DIVINE !", DarkSlam = "SUPER ATTAQUE !",
+}
+local WHITE = Color3.fromRGB(255, 255, 255)
+
+-- ---------- camera de combat (vue cinematique de l'arene) ----------
+
+local Cam = { active = false, shake = 0, punch = 0, focus = 0, focusGoal = 0 }
+
+function Cam.stop()
+    if not Cam.active then return end
+    Cam.active = false
+    pcall(function() RunService:UnbindFromRenderStep("MWS_BattleCam") end)
+    local camera = workspace.CurrentCamera
+    if camera then
+        camera.CameraType = Enum.CameraType.Custom
+        camera.FieldOfView = Cam.prevFov or 70
+        local char = player.Character
+        local hum = char and char:FindFirstChildOfClass("Humanoid")
+        if hum then camera.CameraSubject = hum end
+    end
+end
+
+-- rend la camera au joueur des qu'il a quitte l'arene (ou au plus tard apres maxWait secondes)
+function Cam.release(maxWait)
+    if Cam.active then Cam.releaseAt = os.clock() + (maxWait or 0) end
+end
+
+-- secousse (shake, en studs) + coup de zoom (punch, 0 a 1)
+function Cam.kick(shake, punch)
+    if not Cam.active then return end
+    Cam.shake = math.max(Cam.shake, shake)
+    Cam.punch = math.max(Cam.punch, punch or 0)
+end
+
+function Cam.update(dt)
+    local camera = workspace.CurrentCamera
+    if not Cam.active or not camera then return end
+    local now = os.clock()
+    local t = now - Cam.t0
+    local origin = Cam.origin
+
+    -- securite : si le joueur n'est plus dans l'arene (combat fini, mort, retour), on rend la camera
+    local char = player.Character
+    local hrp = char and char:FindFirstChild("HumanoidRootPart")
+    local away = (not hrp) or (hrp.Position - origin).Magnitude > 75
+    if (away and t > 3) or (Cam.releaseAt and (away or now > Cam.releaseAt)) then
+        Cam.stop()
+        BUI.closeBattle()
+        return
+    end
+
+    -- introduction : la camera part de derriere le joueur et tourne jusqu'a la vue de cote
+    local k = math.clamp(t / 1.8, 0, 1)
+    local e = 1 - (1 - k) * (1 - k) * (1 - k)
+    local angle = -(1 - e) * 1.4 + math.sin(t * 0.35) * 0.08
+    local dist = 27 + (1 - e) * 13
+    local height = 13 + (1 - e) * 8
+    Cam.focus = Cam.focus + (Cam.focusGoal - Cam.focus) * math.min(1, dt * 5)
+    local target = origin + Vector3.new(Cam.focus, -4.5, 0)
+    local eye = origin + Vector3.new(math.sin(angle) * dist + Cam.focus * 0.6, height, math.cos(angle) * dist)
+
+    -- victoire : la camera vient tourner autour du pet du joueur
+    if Cam.mode == "win" then
+        local u = now - Cam.modeT
+        local m = math.min(1, u / 1.2)
+        m = 1 - (1 - m) * (1 - m)
+        local a2 = 0.5 + u * 0.35
+        eye = eye:Lerp(origin + Vector3.new(-10 + math.sin(a2) * 15, 8, math.cos(a2) * 15), m)
+        target = target:Lerp(origin + Vector3.new(-10, -2, 0), m)
+    end
+
+    Cam.shake = Cam.shake * math.exp(-dt * 8)
+    Cam.punch = Cam.punch * math.exp(-dt * 5)
+    local sh = Cam.shake
+    local jitter = Vector3.new((math.random() - 0.5) * sh, (math.random() - 0.5) * sh, (math.random() - 0.5) * sh)
+    camera.CFrame = CFrame.lookAt(eye + jitter, target + jitter * 0.3)
+    camera.FieldOfView = 58 - Cam.punch * 9
+end
+
+function Cam.start(origin, skipIntro)
+    if not BATTLE_CAMERA or typeof(origin) ~= "Vector3" then return end
+    local camera = workspace.CurrentCamera
+    if not camera then return end
+    Cam.origin = origin
+    Cam.releaseAt = nil
+    Cam.mode = nil
+    if Cam.active and skipIntro then return end
+    Cam.t0 = os.clock() - (skipIntro and 5 or 0)
+    Cam.shake, Cam.punch, Cam.focus, Cam.focusGoal = 0, 0, 0, 0
+    if Cam.active then return end
+    Cam.active = true
+    Cam.prevFov = camera.FieldOfView
+    camera.CameraType = Enum.CameraType.Scriptable
+    RunService:BindToRenderStep("MWS_BattleCam", Enum.RenderPriority.Camera.Value + 1, Cam.update)
+end
+
+-- ---------- effets d'interface ----------
+
+function BUI.announce(text, color)
+    local l = BUI.banner
+    l.Text = text
+    l.TextColor3 = color
+    l.TextTransparency = 0
+    BUI.bannerStroke.Transparency = 0
+    Anim.pop(l, 2.2, 0.28)
+    Anim.play(l, Anim.info(0.3, Enum.EasingStyle.Linear, nil, 0.95), { TextTransparency = 1 }, "fade")
+    Anim.play(BUI.bannerStroke, Anim.info(0.3, Enum.EasingStyle.Linear, nil, 0.95), { Transparency = 1 }, "fade")
+end
+
+function BUI.screenFlash(color, strength, time)
+    BUI.flash.BackgroundColor3 = color
+    BUI.flash.BackgroundTransparency = 1 - strength
+    Anim.play(BUI.flash, Anim.info(time), { BackgroundTransparency = 1 })
+end
+
+-- journal du combat : le texte s'ecrit lettre par lettre
+function BUI.setLog(text)
+    text = text or ""
+    if text == Battle.logText then return end
+    Battle.logText = text
+    Battle.logId = (Battle.logId or 0) + 1
+    local id = Battle.logId
+    local n = utf8.len(text) or #text
+    local dur = math.clamp(n * 0.012, 0.15, 0.6)
+    battleLog.Text = text
+    battleLog.MaxVisibleGraphemes = 0
+    task.spawn(function()
+        local t0 = os.clock()
+        while Battle.logId == id and os.clock() - t0 < dur do
+            battleLog.MaxVisibleGraphemes = math.floor(n * (os.clock() - t0) / dur)
+            RunService.RenderStepped:Wait()
+        end
+        if Battle.logId == id then battleLog.MaxVisibleGraphemes = -1 end
+    end)
+end
+
+local function hpColor(side, pct)
+    if side == "player" then
+        return Color3.fromRGB(math.floor(50 + (1 - pct) * 150), math.floor(200 * pct), 50)
+    end
+    return Color3.fromRGB(math.floor(200 * pct + 50), math.floor(80 * (1 - pct)), math.floor(50 * (1 - pct)))
+end
+
+-- barre de vie : descend en douceur, suivie de la trainee blanche ; le nombre de PV defile
+function BUI.setHp(side, pet, idx)
+    local bar, ghost, text = BUI.bar[side], BUI.ghost[side], BUI.hpText[side]
+    local pct = math.clamp(pet.hp / math.max(1, pet.maxHp), 0, 1)
+    local size = UDim2.new(pct, 0, 1, 0)
+    local maxHp = pet.maxHp
+    local function format(v)
+        return math.floor(v + 0.5) .. " / " .. maxHp .. " HP"
+    end
+    local prev = Battle.shown[side]
+    if not prev or prev.idx ~= idx then
+        -- nouveau pet : valeurs posees d'un coup, l'icone surgit
+        Anim.play(bar, Anim.info(0.05), { Size = size, BackgroundColor3 = hpColor(side, pct) })
+        Anim.play(ghost, Anim.info(0.05), { Size = size })
+        Anim.count(text, pet.hp, pet.hp, 0, format)
+        Anim.pop(BUI.icon[side], 0.2, 0.4)
+    else
+        Anim.play(bar, Anim.info(0.25), { Size = size, BackgroundColor3 = hpColor(side, pct) })
+        Anim.play(ghost, Anim.info(0.5, nil, nil, (pct < prev.pct) and 0.3 or 0), { Size = size })
+        Anim.count(text, prev.hp, pet.hp, 0.35, format)
+    end
+    Battle.shown[side] = { idx = idx, pct = pct, hp = pet.hp, maxHp = maxHp }
+end
+
+-- K.O. : la barre tombe a zero et l'icone s'ecrase avant l'arrivee du pet suivant
+function BUI.drain(side)
+    local prev = Battle.shown[side]
+    if not prev then return end
+    local maxHp = prev.maxHp
+    Anim.play(BUI.bar[side], Anim.info(0.25), { Size = UDim2.new(0, 0, 1, 0) })
+    Anim.play(BUI.ghost[side], Anim.info(0.5, nil, nil, 0.3), { Size = UDim2.new(0, 0, 1, 0) })
+    Anim.count(BUI.hpText[side], prev.hp, 0, 0.35, function(v)
+        return math.floor(v + 0.5) .. " / " .. maxHp .. " HP"
+    end)
+    prev.hp, prev.pct = 0, 0
+    Anim.play(Anim.scale(BUI.icon[side]), Anim.info(0.3, Enum.EasingStyle.Back, Enum.EasingDirection.In, 0.25), { Scale = 0.05 }, "scale")
+end
+
+-- impact d'une attaque : secousse du cadre, flash, degats flottants, camera
+function BUI.impact(target, fx)
+    local frame = BUI.frame[target]
+    local special = STYLE_NAMES[fx.style] ~= nil
+    local heavy = special or fx.crit
+    Anim.shake(frame, heavy and 16 or 8, heavy and 0.45 or 0.3)
+    local st = BUI.frameStroke[target]
+    st.Color = WHITE
+    st.Transparency = 0
+    Anim.play(st, Anim.info(0.5), { Transparency = 1 })
+    if fx.damage then
+        Anim.floatText(frame, "-" .. fmtInt(fx.damage),
+            (target == "npc") and Color3.fromRGB(255, 240, 120) or Color3.fromRGB(255, 90, 90),
+            UDim2.fromScale(0.5, 0.35), heavy and 36 or 26, 30)
+    end
+    if target == "player" then
+        BUI.screenFlash(Color3.fromRGB(255, 40, 40), special and 0.4 or 0.22, 0.45)
+    elseif special then
+        BUI.screenFlash((typeof(fx.color) == "Color3") and fx.color or WHITE, 0.35, 0.5)
+    elseif fx.crit then
+        BUI.screenFlash(WHITE, 0.22, 0.3)
+    end
+    if fx.crit then BUI.announce("COUP CRITIQUE !", Color3.fromRGB(255, 220, 80)) end
+    local shake = 0.55
+    if fx.style == "DivineStrike" then shake = 2.6 elseif special then shake = 1.8 elseif fx.crit then shake = 1.2 end
+    Cam.kick(shake, heavy and 1 or 0.25)
+    Cam.focusGoal = 0
+end
+
+function BUI.hideActions()
+    for _, btn in ipairs(ACTION_BUTTONS) do btn.Visible = false end
+end
+
+-- les boutons surgissent l'un apres l'autre ; une attaque tout juste debloquee surgit plus fort
+function BUI.showActions(data)
+    local order = 0
+    for _, btn in ipairs(ACTION_BUTTONS) do
+        local want = btn ~= switchBtn or #data.playerPets > 1
+        if not want then
+            btn.Visible = false
+        elseif not btn.Visible then
+            btn.Visible = true
+            if Battle.unlocked[btn] then
+                Anim.pop(btn, 1.7, 0.5, order * 0.04)
+            else
+                Anim.pop(btn, 0.4, 0.3, order * 0.04)
+            end
+            order = order + 1
+        end
+        Battle.unlocked[btn] = nil
+    end
+end
+
+function BUI.setCharge(chargePct)
+    local full = chargePct >= 1
+    local color = full and Color3.fromRGB(255, 220, 80) or Color3.fromRGB(255, math.floor(180 - 120 * chargePct), 50)
+    Anim.play(chargeBar, Anim.info(0.35), { Size = UDim2.new(math.clamp(chargePct, 0, 1), 0, 1, 0), BackgroundColor3 = color })
+    if full then
+        chargeText.Text = "CHARGE MAX !"
+        chargeText.TextColor3 = Color3.fromRGB(50, 50, 0)
+    else
+        chargeText.Text = "Charge: " .. math.floor(chargePct * 100) .. "%"
+        chargeText.TextColor3 = WHITE
+    end
+    BUI.glow[chargeBarBg].Enabled = full
+    if full and not Battle.wasFull then Anim.pop(chargeBarBg, 1.18, 0.4) end
+    Battle.wasFull = full
+    for _, sp in ipairs(SPECIALS) do
+        local can = chargePct >= sp.need
+        Anim.play(sp.btn, Anim.SOFT, {
+            BackgroundColor3 = can and sp.color or Color3.fromRGB(60, 60, 60),
+            TextColor3 = can and WHITE or Color3.fromRGB(120, 120, 120)
+        }, "color")
+        BUI.glow[sp.btn].Enabled = can
+        if can and Battle.avail[sp.btn] == false then Battle.unlocked[sp.btn] = true end
+        Battle.avail[sp.btn] = can
+    end
+end
+
+-- "Tour de l'adversaire..." avec des points qui defilent
+function BUI.setWaiting(on)
+    if on == (Battle.waiting == true) then return end
+    Battle.waiting = on
+    Battle.waitId = Battle.waitId + 1
+    if not on then
+        battleResult.Text = ""
+        return
+    end
+    local id = Battle.waitId
+    battleResult.TextColor3 = Color3.fromRGB(220, 220, 230)
+    task.spawn(function()
+        local n = 0
+        while Battle.waitId == id do
+            n = n % 3 + 1
+            battleResult.Text = "Tour de l'adversaire" .. string.rep(".", n)
+            task.wait(0.3)
+        end
+    end)
+end
+
+-- grand ecran de fin : VICTOIRE (rayons + zoom) ou DEFAITE (le texte tombe du haut)
+function BUI.showResult(result, fx)
+    local label, sub = BUI.result, BUI.resultSub
+    local text, color, subText = "DEFAITE", Color3.fromRGB(255, 80, 80), "Reessaie quand tu seras plus fort !"
+    if result == "win" then
+        text, color = "VICTOIRE !", Color3.fromRGB(255, 225, 90)
+        subText = (fx and fx.reward) and ("+" .. fmtInt(fx.reward) .. " coins") or ""
+    elseif result == "flee" then
+        text, color, subText = "FUITE...", Color3.fromRGB(200, 200, 210), ""
+    end
+    label.Text = text
+    label.TextColor3 = color
+    label.Visible = true
+    sub.Text = subText
+    sub.Visible = true
+    Anim.pop(sub, 0.01, 0.35, 0.45)
+    if result == "win" then
+        label.Position = BUI.resultHome
+        Anim.setRays(BUI.rays, color, true)
+        Anim.pop(label, 3, 0.45)
+        BUI.screenFlash(color, 0.5, 0.7)
+        Cam.mode = "win"
+        Cam.modeT = os.clock()
+    else
+        BUI.rays.Visible = false
+        Anim.scale(label).Scale = 1
+        label.Position = UDim2.fromScale(0.5, -0.12)
+        Anim.play(label, Anim.info(0.7, Enum.EasingStyle.Bounce), { Position = BUI.resultHome })
+        BUI.screenFlash(Color3.fromRGB(120, 0, 0), 0.35, 0.9)
+    end
+end
+
+-- fermeture : le panneau glisse hors de l'ecran, la camera est rendue au joueur
+function BUI.closeBattle()
+    Battle.live = false
+    BUI.setWaiting(false)
+    BUI.result.Visible = false
+    BUI.resultSub.Visible = false
+    BUI.rays.Visible = false
+    Cam.release(2.5)
+    if not battleFrame.Visible then return end
+    local serial = battleSerial
+    local tw = Anim.play(battlePanel, Anim.info(0.25, Enum.EasingStyle.Quad, Enum.EasingDirection.In),
+        { Position = BUI.panelHome + UDim2.fromOffset(0, 480) }, "slide")
+    tw.Completed:Connect(function()
+        if serial == battleSerial then battleFrame.Visible = false end
+    end)
+end
+
+-- introduction : le panneau monte du bas de l'ecran, bandeau "JOUEUR VS DRESSEUR"
+function BUI.intro(data)
+    Battle.shown, Battle.avail, Battle.unlocked = {}, {}, {}
+    Battle.logText, Battle.wasFull, Battle.live = nil, false, true
+    BUI.result.Visible = false
+    BUI.resultSub.Visible = false
+    BUI.rays.Visible = false
+    BUI.hideActions()
+    battleFrame.Visible = true
+    battlePanel.Position = BUI.panelHome + UDim2.fromOffset(0, 480)
+    Anim.play(battlePanel, Anim.info(0.5, Enum.EasingStyle.Back), { Position = BUI.panelHome }, "slide")
+
+    local serial = battleSerial
+    local left, right, mid = BUI.vsLeft, BUI.vsRight, BUI.vsMid
+    left.Text = player.DisplayName
+    right.Text = data.npcName or "Dresseur"
+    mid.Visible = false
+    left.Visible, right.Visible = true, true
+    left.Position = UDim2.new(-0.25, 0, 0.3, 0)
+    right.Position = UDim2.new(1.25, 0, 0.3, 0)
+    Anim.play(left, Anim.info(0.4, Enum.EasingStyle.Back), { Position = UDim2.new(0.5, -250, 0.3, 0) })
+    Anim.play(right, Anim.info(0.4, Enum.EasingStyle.Back), { Position = UDim2.new(0.5, 250, 0.3, 0) })
+    task.delay(0.3, function()
+        if serial ~= battleSerial then return end
+        mid.Visible = true
+        Anim.pop(mid, 4, 0.35)
+        BUI.screenFlash(WHITE, 0.35, 0.4)
+        Cam.kick(0.8, 0.5)
+    end)
+    task.delay(1.9, function()
+        if serial ~= battleSerial then return end
+        mid.Visible = false
+        Anim.play(left, Anim.info(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.In), { Position = UDim2.new(-0.25, 0, 0.3, 0) })
+        Anim.play(right, Anim.info(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.In), { Position = UDim2.new(1.25, 0, 0.3, 0) })
+        task.delay(0.32, function()
+            if serial ~= battleSerial then return end
+            left.Visible, right.Visible = false, false
+        end)
+    end)
+end
+
+-- ---------- mise a jour de l'interface ----------
 
 local function updateBattleUI(data)
     battleData = data
@@ -1020,14 +1803,7 @@ local function updateBattleUI(data)
         local myImg = getPetImage(myPet.name)
         playerPetImg.Image = myImg or ""
         playerPetImg.Visible = myImg ~= nil
-        local hpPct = myPet.hp / myPet.maxHp
-        playerHpBar.Size = UDim2.new(hpPct, 0, 1, 0)
-        playerHpBar.BackgroundColor3 = Color3.fromRGB(
-            math.floor(50 + (1 - hpPct) * 150),
-            math.floor(200 * hpPct),
-            50
-        )
-        playerHpText.Text = myPet.hp .. " / " .. myPet.maxHp .. " HP"
+        BUI.setHp("player", myPet, data.playerCurrent)
         playerPetCount.Text = "Pet " .. data.playerCurrent .. " / " .. #data.playerPets
     end
 
@@ -1037,107 +1813,104 @@ local function updateBattleUI(data)
         local enImg = getPetImage(enemyPet.name)
         npcPetImg.Image = enImg or ""
         npcPetImg.Visible = enImg ~= nil
-        local hpPct = enemyPet.hp / enemyPet.maxHp
-        npcHpBar.Size = UDim2.new(hpPct, 0, 1, 0)
-        npcHpBar.BackgroundColor3 = Color3.fromRGB(
-            math.floor(200 * hpPct + 50),
-            math.floor(80 * (1 - hpPct)),
-            math.floor(50 * (1 - hpPct))
-        )
-        npcHpText.Text = enemyPet.hp .. " / " .. enemyPet.maxHp .. " HP"
+        BUI.setHp("npc", enemyPet, data.npcCurrent)
         npcPetCount.Text = "Pet " .. data.npcCurrent .. " / " .. #data.npcPets
     end
 
-    battleLog.Text = data.log or ""
+    BUI.setLog(data.log)
     fleeBtn.Visible = (data.active == true)
 
-    -- Calculer la charge POURTOUR d'abord
     local charge = data.playerCharge or 0
     local maxCharge = data.playerMaxCharge or 100
-    local chargePct = maxCharge > 0 and (charge / maxCharge) or 0
-
-    chargeBar.Size = UDim2.new(chargePct, 0, 1, 0)
-    if chargePct >= 1 then
-        chargeBar.BackgroundColor3 = Color3.fromRGB(255, 220, 80)
-        chargeText.Text = "CHARGE MAX !"
-        chargeText.TextColor3 = Color3.fromRGB(50, 50, 0)
-    else
-        chargeBar.BackgroundColor3 = Color3.fromRGB(255, math.floor(180 - 120 * chargePct), 50)
-        chargeText.Text = "Charge: " .. math.floor(chargePct * 100) .. "%"
-        chargeText.TextColor3 = Color3.fromRGB(255, 255, 255)
-    end
+    BUI.setCharge(maxCharge > 0 and (charge / maxCharge) or 0)
+    superBtn.Visible = false
 
     if data.active then
         if data.turn == "player" then
-            attackBtn.Visible = true
-            switchBtn.Visible = #data.playerPets > 1
-
-            -- Special 1: Lame de Feu (50% charge)
-            local canS1 = chargePct >= 0.5
-            if canS1 then
-                special1Btn.Visible = true
-                special1Btn.BackgroundColor3 = Color3.fromRGB(255, 100, 30)
-                special1Btn.TextColor3 = Color3.fromRGB(255, 255, 255)
-            else
-                special1Btn.Visible = true
-                special1Btn.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
-                special1Btn.TextColor3 = Color3.fromRGB(120, 120, 120)
-            end
-
-            -- Special 2: Tempete Glace (75% charge)
-            local canS2 = chargePct >= 0.75
-            if canS2 then
-                special2Btn.Visible = true
-                special2Btn.BackgroundColor3 = Color3.fromRGB(80, 180, 255)
-                special2Btn.TextColor3 = Color3.fromRGB(255, 255, 255)
-            else
-                special2Btn.Visible = true
-                special2Btn.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
-                special2Btn.TextColor3 = Color3.fromRGB(120, 120, 120)
-            end
-
-            -- Special 3: Frappe Divine (100% charge)
-            local canS3 = chargePct >= 1.0
-            if canS3 then
-                special3Btn.Visible = true
-                special3Btn.BackgroundColor3 = Color3.fromRGB(255, 220, 80)
-                special3Btn.TextColor3 = Color3.fromRGB(255, 255, 255)
-            else
-                special3Btn.Visible = true
-                special3Btn.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
-                special3Btn.TextColor3 = Color3.fromRGB(120, 120, 120)
-            end
-
-            superBtn.Visible = false
-            battleResult.Text = ""
+            BUI.setWaiting(false)
+            BUI.showActions(data)
         else
-            attackBtn.Visible = false
-            switchBtn.Visible = false
-            special1Btn.Visible = false
-            special2Btn.Visible = false
-            special3Btn.Visible = false
-            superBtn.Visible = false
-            battleResult.Text = "Tour de l'adversaire..."
+            BUI.hideActions()
+            BUI.setWaiting(true)
         end
     else
-        attackBtn.Visible = false
-        switchBtn.Visible = false
-        special1Btn.Visible = false
-        special2Btn.Visible = false
-        special3Btn.Visible = false
-        superBtn.Visible = false
-        if string.find(data.log or "", "VICTOIRE") then
-            battleResult.Text = "VICTOIRE !"
-            battleResult.TextColor3 = Color3.fromRGB(100, 255, 100)
-        elseif string.find(data.log or "", "Defaite") then
-            battleResult.Text = "DEFAITE"
-            battleResult.TextColor3 = Color3.fromRGB(255, 80, 80)
+        BUI.hideActions()
+        BUI.setWaiting(false)
+        if Battle.ended ~= battleSerial then
+            Battle.ended = battleSerial
+            local fx = data.fx
+            local result = fx and fx.result
+            if not result then
+                if string.find(data.log or "", "VICTOIRE") then
+                    result = "win"
+                elseif string.find(data.log or "", "Defaite") then
+                    result = "lose"
+                end
+            end
+            if result then BUI.showResult(result, fx) end
+            local serial = battleSerial
+            task.delay((result == "flee") and 1.3 or 3.6, function()
+                if serial ~= battleSerial then return end
+                BUI.closeBattle()
+            end)
         end
+    end
+end
+
+-- applique une mise a jour au moment de l'impact (l'interface reste synchronisee avec l'arene)
+function BUI.apply(data, seq)
+    if seq < Battle.applied then return end
+    Battle.applied = seq
+    local fx = data.fx
+    if fx and fx.kind == "strike" then
+        local target = (fx.actor == "player") and "npc" or "player"
+        BUI.impact(target, fx)
+        local prev = Battle.shown[target]
+        local cur = (target == "npc") and data.npcCurrent or data.playerCurrent
+        if fx.ko and prev and prev.idx ~= cur then
+            -- K.O. : la barre tombe a zero, puis le pet suivant entre en scene
+            BUI.drain(target)
+            BUI.setLog(data.log)
+            local serial = battleSerial
+            task.delay(0.9, function()
+                if serial ~= battleSerial or Battle.applied ~= seq then return end
+                updateBattleUI(data)
+            end)
+            return
+        end
+    end
+    updateBattleUI(data)
+end
+
+-- reception d'une mise a jour du serveur : annonce l'attaque tout de suite, applique le reste a l'impact
+local function onBattleData(data)
+    if type(data) ~= "table" then return end
+    Battle.seq = Battle.seq + 1
+    local seq = Battle.seq
+    local fx = (type(data.fx) == "table") and data.fx or nil
+    if fx and fx.kind == "strike" then
+        BUI.hideActions()
+        local name = STYLE_NAMES[fx.style]
+        if name then BUI.announce(name, (typeof(fx.color) == "Color3") and fx.color or WHITE) end
+        Cam.focusGoal = (fx.actor == "player") and 3 or -3
+        local st = BUI.frameStroke[fx.actor]
+        if st then
+            st.Color = BUI.sideColor[fx.actor]
+            st.Transparency = 0
+            Anim.play(st, Anim.info(0.6), { Transparency = 1 })
+        end
+    elseif fx and fx.kind == "switch" then
+        BUI.hideActions()
+    end
+    local wait = (fx and tonumber(fx.impact)) or 0
+    if wait > 0 then
         local serial = battleSerial
-        task.delay(3, function()
+        task.delay(wait, function()
             if serial ~= battleSerial then return end
-            battleFrame.Visible = false
+            BUI.apply(data, seq)
         end)
+    else
+        BUI.apply(data, seq)
     end
 end
 
@@ -1165,6 +1938,104 @@ superBtn.MouseButton1Click:Connect(function()
     BattleAction:FireServer("super")
 end)
 
+-- ---------- eclosion, renaissance et messages plein ecran ----------
+
+local HATCH_TIER = { Legendaire = 2, Mythique = 2, Divin = 3, Secret = 3 }
+
+function Overlay.begin(dim)
+    Overlay.id = Overlay.id + 1
+    hatchFrame.Visible = true
+    hatchFrame.BackgroundTransparency = 1
+    Anim.play(hatchFrame, Anim.SOFT, { BackgroundTransparency = dim })
+    Anim.play(hatchLabel, Anim.info(0.05), { TextTransparency = 0, TextStrokeTransparency = 0.3 }, "fade")
+    hatchImage.Visible = false
+    Overlay.egg.Visible = false
+    Overlay.rays.Visible = false
+    return Overlay.id
+end
+
+function Overlay.finish(id)
+    if id ~= Overlay.id then return end
+    hatchImage.Visible = false
+    Overlay.egg.Visible = false
+    Overlay.rays.Visible = false
+    Anim.play(hatchLabel, Anim.info(0.2), { TextTransparency = 1, TextStrokeTransparency = 1 }, "fade")
+    local tw = Anim.play(hatchFrame, Anim.info(0.22), { BackgroundTransparency = 1 })
+    tw.Completed:Connect(function()
+        if id == Overlay.id then hatchFrame.Visible = false end
+    end)
+end
+
+-- message d'erreur / d'information : surgit en tremblant
+function Overlay.message(text, color, size, duration)
+    local id = Overlay.begin(0.5)
+    hatchLabel.Text = text
+    hatchLabel.TextColor3 = color
+    hatchLabel.TextSize = size
+    Anim.pop(hatchLabel, 0.5, 0.3)
+    Anim.shake(hatchLabel, 12, 0.35)
+    task.delay(duration, function() Overlay.finish(id) end)
+end
+
+-- eclosion : l'oeuf tremble de plus en plus fort, flash, puis l'animal surgit devant les rayons
+function Overlay.hatch(pet)
+    local id = Overlay.begin(0.45)
+    local rc = RARITY_COLORS[pet.rarity] or WHITE
+    local tier = HATCH_TIER[pet.rarity] or 1
+    hatchLabel.TextSize = 30
+    hatchLabel.TextColor3 = WHITE
+    hatchLabel.Text = "Eclosion..."
+    Anim.pop(hatchLabel, 0.6, 0.3)
+    local egg = Overlay.egg
+    local eggScale = Anim.scale(egg)
+    egg.Rotation = 0
+    eggScale.Scale = 0.05
+    egg.Visible = true
+    task.spawn(function()
+        local t0 = os.clock()
+        local dur = 1.1
+        while os.clock() - t0 < dur do
+            if id ~= Overlay.id then return end
+            local k = (os.clock() - t0) / dur
+            egg.Rotation = math.sin(k * k * 45) * (5 + 24 * k)
+            eggScale.Scale = math.min(1, 0.05 + k * 6) * (1 + 0.3 * k)
+            RunService.RenderStepped:Wait()
+        end
+        if id ~= Overlay.id then return end
+        egg.Visible = false
+        BUI.screenFlash(rc, 0.5 + tier * 0.12, 0.55)
+        Overlay.rays.Position = UDim2.new(0.5, 0, 0.5, -190)
+        Anim.setRays(Overlay.rays, rc, true)
+        local img = getPetImage(pet.name)
+        hatchImage.Image = img or ""
+        hatchImage.BackgroundColor3 = colorFromData(pet.color)
+        hatchImage.BackgroundTransparency = img and 1 or 0
+        Overlay.imgStroke.Color = rc
+        Overlay.imgStroke.Enabled = img == nil
+        hatchImage.Visible = true
+        Anim.pop(hatchImage, 0.15, 0.45)
+        hatchLabel.Text = pet.name .. "\n" .. pet.rarity .. "\n+" .. tostring(pet.income or 0) .. " coins/sec"
+        hatchLabel.TextColor3 = rc
+        Anim.pop(hatchLabel, 0.4, 0.4)
+        if tier >= 2 then Anim.shake(hatchLabel, 5 * tier, 0.4) end
+        task.wait(1.6 + tier * 0.3)
+        Overlay.finish(id)
+    end)
+end
+
+function Overlay.rebirth(level)
+    local id = Overlay.begin(0.35)
+    local c = Color3.fromRGB(215, 130, 255)
+    BUI.screenFlash(c, 0.7, 0.8)
+    Overlay.rays.Position = UDim2.new(0.5, 0, 0.5, -50)
+    Anim.setRays(Overlay.rays, c, true)
+    hatchLabel.TextSize = 30
+    hatchLabel.TextColor3 = c
+    hatchLabel.Text = "RENAISSANCE !\nNiveau: " .. level .. "\nMultiplier x" .. (1 + level * 0.5)
+    Anim.pop(hatchLabel, 3, 0.5)
+    task.delay(3, function() Overlay.finish(id) end)
+end
+
 -- ============================================================
 -- TOGGLES
 -- ============================================================
@@ -1174,42 +2045,39 @@ fleeBtn.MouseButton1Click:Connect(function()
 end)
 
 invButton.MouseButton1Click:Connect(function()
-    panel.Visible = not panel.Visible
-    if panel.Visible then
-        eggPanel.Visible = false
-        combatPanel.Visible = false
-        refreshPanel()
+    if Anim.toggle(panel) then
+        Anim.hide(eggPanel)
+        Anim.hide(combatPanel)
+        refreshPanel(true)
     end
 end)
 
 closeButton.MouseButton1Click:Connect(function()
-    panel.Visible = false
+    Anim.hide(panel)
 end)
 
 eggButton.MouseButton1Click:Connect(function()
-    eggPanel.Visible = not eggPanel.Visible
-    if eggPanel.Visible then
-        panel.Visible = false
-        combatPanel.Visible = false
-        refreshEggPanel()
+    if Anim.toggle(eggPanel) then
+        Anim.hide(panel)
+        Anim.hide(combatPanel)
+        refreshEggPanel(true)
     end
 end)
 
 eggCloseBtn.MouseButton1Click:Connect(function()
-    eggPanel.Visible = false
+    Anim.hide(eggPanel)
 end)
 
 combatButton.MouseButton1Click:Connect(function()
-    combatPanel.Visible = not combatPanel.Visible
-    if combatPanel.Visible then
-        panel.Visible = false
-        eggPanel.Visible = false
-        refreshCombatPanel()
+    if Anim.toggle(combatPanel) then
+        Anim.hide(panel)
+        Anim.hide(eggPanel)
+        refreshCombatPanel(true)
     end
 end)
 
 combatCloseBtn.MouseButton1Click:Connect(function()
-    combatPanel.Visible = false
+    Anim.hide(combatPanel)
 end)
 
 rebirthButton.MouseButton1Click:Connect(function()
@@ -1220,12 +2088,40 @@ end)
 -- STATE UPDATE
 -- ============================================================
 
+local Coin = {}
+
+local function formatCoins(v)
+    return fmtInt(v) .. " Coins"
+end
+
 StateUpdate.OnClientEvent:Connect(function(newState, income)
     state = newState
-    incomePerSec = income or 0
-    coinLabel.Text = ((tostring(math.floor(state.coins or 0)):reverse():gsub("(%d%d%d)", "%1 "):reverse():gsub("^%s+", ""))) .. " Coins"
+    local newIncome = income or 0
+    local coins = math.floor(state.coins or 0)
+    local prev = Coin.shown
+    Coin.shown = coins
+    if prev == nil then
+        coinLabel.Text = formatCoins(coins)
+    else
+        -- le compteur defile ; les gros gains (cristaux, combats) et les depenses flottent a cote
+        Anim.count(coinLabel, prev, coins, 0.45, formatCoins)
+        local delta = coins - prev
+        if delta >= math.max(50, incomePerSec * 3) then
+            Anim.pop(coinIcon, 1.5, 0.35)
+            Anim.floatText(gui, "+" .. fmtInt(delta), Color3.fromRGB(255, 230, 110), UDim2.fromOffset(200, 100), 22, 30)
+        elseif delta < 0 then
+            Anim.floatText(gui, "-" .. fmtInt(-delta), Color3.fromRGB(255, 110, 110), UDim2.fromOffset(200, 100), 20, 30)
+            Anim.shake(topBar, 4, 0.25)
+        end
+    end
+    if Coin.income ~= nil and Coin.income ~= newIncome then Anim.pop(incomeLabel, 1.25, 0.3) end
+    Coin.income = newIncome
+    incomePerSec = newIncome
     incomeLabel.Text = "+" .. incomePerSec .. " /sec"
-    rebirthLabel.Text = "Renaissance: " .. tostring(state.rebirthLevel or 0)
+    local level = state.rebirthLevel or 0
+    if Coin.rebirth ~= nil and Coin.rebirth ~= level then Anim.pop(rebirthLabel, 1.6, 0.45) end
+    Coin.rebirth = level
+    rebirthLabel.Text = "Renaissance: " .. tostring(level)
     if panel.Visible then refreshPanel() end
     if combatPanel.Visible then refreshCombatPanel() end
 end)
@@ -1250,7 +2146,7 @@ NPCInfo.OnClientEvent:Connect(function(data, total, rb)
     local ready = type(rb) == "table" and (rb.needed or 0) > 0 and (rb.done or 0) >= (rb.needed or 0)
     rebirthButton:SetAttribute("Ready", ready)
     if combatPanel.Visible then refreshCombatPanel() end
-    rebirthButton.Visible = ready and #npcData > 0
+    setRebirthVisible(ready and #npcData > 0)
 end)
 
 -- ============================================================
@@ -1258,85 +2154,53 @@ end)
 -- ============================================================
 
 BattleStart.OnClientEvent:Connect(function(data)
+    if type(data) ~= "table" then return end
     if data.success then
+        -- resume = le serveur resynchronise un combat deja affiche (pas de nouvelle introduction)
+        local resume = Battle.live and battleFrame.Visible and not data.intro
         battleSerial = battleSerial + 1
-        battleFrame.Visible = true
-        battleResult.Text = ""
+        Battle.seq = Battle.seq + 1
+        Battle.applied = Battle.seq
+        if resume then
+            Cam.start(data.arena, true)
+        else
+            BUI.intro(data)
+            Cam.start(data.arena, false)
+        end
         updateBattleUI(data)
     else
-        hatchFrame.Visible = true
-        hatchFrame.BackgroundTransparency = 0.5
-        hatchLabel.Text = data.message or "Erreur"
-        hatchLabel.TextColor3 = Color3.fromRGB(255, 100, 100)
-        hatchLabel.TextSize = 24
-        task.wait(2)
-        hatchFrame.Visible = false
+        Overlay.message(data.message or "Erreur", Color3.fromRGB(255, 100, 100), 24, 2)
     end
 end)
 
-BattleUpdate.OnClientEvent:Connect(function(data)
-    updateBattleUI(data)
+BattleUpdate.OnClientEvent:Connect(onBattleData)
+
+-- respawn pendant un combat : on rend la camera et on ferme l'interface
+player.CharacterAdded:Connect(function()
+    if Cam.active or Battle.live then
+        Cam.stop()
+        BUI.closeBattle()
+    end
 end)
 
 RebirthRemote.OnClientEvent:Connect(function(data)
     if data.success then
-        hatchFrame.Visible = true
-        hatchFrame.BackgroundTransparency = 0.3
-        hatchLabel.Text = "RENAISSANCE !\nNiveau: " .. data.rebirthLevel .. "\nMultiplier x" .. (1 + data.rebirthLevel * 0.5)
-        hatchLabel.TextColor3 = Color3.fromRGB(200, 100, 255)
-        hatchLabel.TextSize = 28
-        task.wait(3)
-        hatchFrame.Visible = false
-        rebirthButton.Visible = false
+        Overlay.rebirth(data.rebirthLevel)
+        setRebirthVisible(false)
     else
-        hatchFrame.Visible = true
-        hatchFrame.BackgroundTransparency = 0.5
-        hatchLabel.Text = data.message or "Erreur"
-        hatchLabel.TextColor3 = Color3.fromRGB(255, 100, 100)
-        hatchLabel.TextSize = 22
-        task.wait(2.5)
-        hatchFrame.Visible = false
+        Overlay.message(data.message or "Erreur", Color3.fromRGB(255, 100, 100), 22, 2.5)
     end
 end)
-	
+
 -- ============================================================
 -- HATCH ANIMATION
 -- ============================================================
 
 BuyEgg.OnClientEvent:Connect(function(data)
     if data.success then
-        local pet = data.pet
-        hatchFrame.Visible = true
-        hatchFrame.BackgroundTransparency = 0.5
-
-        hatchLabel.TextSize = 30
-        hatchLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
-        hatchLabel.Text = "Eclosion..."
-
-        local tween = TweenService:Create(hatchLabel, TweenInfo.new(0.5), { TextSize = 50 })
-        tween:Play()
-        task.wait(0.5)
-
-        hatchLabel.TextSize = 30
-        local rc = RARITY_COLORS[pet.rarity] or Color3.fromRGB(255, 255, 255)
-        hatchLabel.Text = pet.name .. "\n" .. pet.rarity .. "\n+" .. tostring(pet.income or 0) .. " coins/sec"
-        hatchLabel.TextColor3 = rc
-        local revealImg = getPetImage(pet.name)
-        hatchImage.Image = revealImg or ""
-        hatchImage.Visible = revealImg ~= nil
-
-        task.wait(1.8)
-        hatchImage.Visible = false
-
-        hatchFrame.Visible = false
+        Overlay.hatch(data.pet)
     else
-        hatchFrame.Visible = true
-        hatchFrame.BackgroundTransparency = 0.5
-        hatchLabel.Text = data.message or "Erreur"
-        hatchLabel.TextColor3 = Color3.fromRGB(255, 100, 100)
-        hatchLabel.TextSize = 26
-        task.wait(1.5)
-        hatchFrame.Visible = false
+        Overlay.message(data.message or "Erreur", Color3.fromRGB(255, 100, 100), 26, 1.5)
     end
 end)
 
@@ -1371,6 +2235,7 @@ do
         b.TextSize = 16
         makeCorner(b, 10)
         b.Parent = gui
+        Anim.button(Anim.center(b))
         return b
     end
 
@@ -1412,7 +2277,8 @@ do
         x.ZIndex = 6
         makeCorner(x, 8)
         x.Parent = f
-        x.MouseButton1Click:Connect(function() f.Visible = false end)
+        x.MouseButton1Click:Connect(function() Anim.hide(f) end)
+        Anim.button(Anim.center(x))
 
         local status = Instance.new("TextLabel")
         status.Size = UDim2.new(1, -30, 0, 28)
@@ -1454,12 +2320,12 @@ do
 
     local function closeOthers(except)
         for _, p in ipairs({ panel, eggPanel, combatPanel, shopPanel, worldPanel }) do
-            if p ~= except then p.Visible = false end
+            if p ~= except then Anim.hide(p) end
         end
     end
 
     -- ---------- boutique ----------
-    local function refreshShop()
+    local function refreshShop(animate)
         for _, c in ipairs(shopScroll:GetChildren()) do
             if c:IsA("Frame") then c:Destroy() end
         end
@@ -1470,6 +2336,7 @@ do
             card.ZIndex = 6
             makeCorner(card, 12)
             card.Parent = shopScroll
+            if animate then Anim.pop(card, 0.6, 0.3, math.min(i, 10) * 0.04) end
 
             local icon = Instance.new("TextLabel")
             icon.Size = UDim2.new(0, 56, 0, 56)
@@ -1532,6 +2399,7 @@ do
             buy.MouseButton1Click:Connect(function()
                 if not item.owned then ShopBuy:FireServer(item.key) end
             end)
+            Anim.button(Anim.center(buy))
         end
     end
 
@@ -1560,7 +2428,7 @@ do
     end)
 
     -- ---------- mondes ----------
-    local function refreshWorlds()
+    local function refreshWorlds(animate)
         for _, c in ipairs(worldScroll:GetChildren()) do
             if c:IsA("Frame") then c:Destroy() end
         end
@@ -1572,6 +2440,7 @@ do
             row.ZIndex = 6
             makeCorner(row, 12)
             row.Parent = worldScroll
+            if animate then Anim.pop(row, 0.7, 0.3, i * 0.06) end
 
             local nameL = Instance.new("TextLabel")
             nameL.Size = UDim2.new(1, -150, 0, 30)
@@ -1621,8 +2490,9 @@ do
             go.Parent = row
             go.MouseButton1Click:Connect(function()
                 WorldTeleport:FireServer(i)
-                worldPanel.Visible = false
+                Anim.hide(worldPanel)
             end)
+            Anim.button(Anim.center(go))
         end
     end
 
@@ -1638,20 +2508,20 @@ do
     local boostBtn = makeBtn("\u{26A1} Boost 500", 145, 245, Color3.fromRGB(60, 160, 200))
 
     shopBtn.MouseButton1Click:Connect(function()
-        local show = not shopPanel.Visible
+        local show = not Anim.opened[shopPanel]
         closeOthers(show and shopPanel or nil)
-        shopPanel.Visible = show
         if show then
-            refreshShop()
+            Anim.show(shopPanel)
+            refreshShop(true)
             ShopBuy:FireServer("__info")
         end
     end)
     worldsBtn.MouseButton1Click:Connect(function()
-        local show = not worldPanel.Visible
+        local show = not Anim.opened[worldPanel]
         closeOthers(show and worldPanel or nil)
-        worldPanel.Visible = show
         if show then
-            refreshWorlds()
+            Anim.show(worldPanel)
+            refreshWorlds(true)
             ShopBuy:FireServer("__info")
         end
     end)
@@ -1661,8 +2531,8 @@ do
     -- les anciens boutons ferment aussi les nouveaux panneaux
     for _, b in ipairs({ invButton, eggButton, combatButton }) do
         b.MouseButton1Click:Connect(function()
-            shopPanel.Visible = false
-            worldPanel.Visible = false
+            Anim.hide(shopPanel)
+            Anim.hide(worldPanel)
         end)
     end
 end

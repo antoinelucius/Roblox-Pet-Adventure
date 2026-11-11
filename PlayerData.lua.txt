@@ -437,17 +437,192 @@ local function notify(player, text, color)
 	stroke.Color = color or WHITE
 	stroke.Thickness = 2
 	stroke.Parent = lbl
+	-- entree : le message tombe du haut de l'ecran avec un petit rebond
+	lbl.Position = UDim2.new(0.5, 0, -0.1, 0)
 	gui.Parent = pg
+	TweenService:Create(lbl, TweenInfo.new(0.4, Enum.EasingStyle.Back, Enum.EasingDirection.Out), { Position = UDim2.new(0.5, 0, 0.08, 0) }):Play()
 	task.delay(2.8, function()
 		pcall(function()
-			TweenService:Create(lbl, TweenInfo.new(0.4), { TextTransparency = 1, BackgroundTransparency = 1 }):Play()
+			TweenService:Create(lbl, TweenInfo.new(0.4, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
+				TextTransparency = 1, BackgroundTransparency = 1, Position = UDim2.new(0.5, 0, 0.04, 0)
+			}):Play()
 			TweenService:Create(stroke, TweenInfo.new(0.4), { Transparency = 1 }):Play()
 		end)
 	end)
 	Debris:AddItem(gui, 3.4)
 end
 
-local function popText(parent, pos, text, color)
+-- ============================================================
+-- EFFETS VISUELS : boite a outils d'animation (tout passe par la table FX)
+-- ============================================================
+
+local FX = {}
+
+function FX.tween(inst, time, props, style, dir, delay)
+	local info = TweenInfo.new(time, style or Enum.EasingStyle.Quad, dir or Enum.EasingDirection.Out, 0, false, delay or 0)
+	local tw = TweenService:Create(inst, info, props)
+	tw:Play()
+	return tw
+end
+
+-- rebond (0 -> 1) utilise pour les atterrissages
+function FX.bounceOut(k)
+	if k < 1 / 2.75 then
+		return 7.5625 * k * k
+	elseif k < 2 / 2.75 then
+		k = k - 1.5 / 2.75
+		return 7.5625 * k * k + 0.75
+	elseif k < 2.5 / 2.75 then
+		k = k - 2.25 / 2.75
+		return 7.5625 * k * k + 0.9375
+	end
+	k = k - 2.625 / 2.75
+	return 7.5625 * k * k + 0.984375
+end
+
+-- piece d'effet : ancree, sans collision, supprimee automatiquement
+-- shape : "o" = boule, "c" = cylindre, autre = bloc
+function FX.part(parent, shape, size, cf, color, mat, trans, life)
+	local p = Instance.new("Part")
+	p.Name = "FX"
+	if shape == "o" then
+		p.Shape = Enum.PartType.Ball
+	elseif shape == "c" then
+		p.Shape = Enum.PartType.Cylinder
+	end
+	p.Anchored = true
+	p.CanCollide = false
+	p.CanTouch = false
+	p.CanQuery = false
+	p.CastShadow = false
+	p.Material = mat or M.Neon
+	p.Color = color or WHITE
+	p.Transparency = trans or 0
+	p.TopSurface = Enum.SurfaceType.Smooth
+	p.BottomSurface = Enum.SurfaceType.Smooth
+	p.Size = size
+	p.CFrame = (typeof(cf) == "Vector3") and CF(cf) or cf
+	p.Parent = parent
+	Debris:AddItem(p, life or 2)
+	return p
+end
+
+-- boule de lumiere qui gonfle puis s'efface
+function FX.burst(parent, pos, color, from, to, time, trans)
+	local p = FX.part(parent, "o", V3(from, from, from), pos, color, M.Neon, trans or 0.1, time + 0.25)
+	FX.tween(p, time, { Size = V3(to, to, to), Transparency = 1 })
+	return p
+end
+
+-- onde de choc au sol (disque plat qui s'elargit)
+function FX.ring(parent, pos, color, from, to, time, thick, trans)
+	thick = thick or 0.3
+	local p = FX.part(parent, "c", V3(thick, from, from), CF(pos) * CFrame.Angles(0, 0, math.pi / 2), color, M.Neon, trans or 0.3, time + 0.25)
+	FX.tween(p, time, { Size = V3(thick, to, to), Transparency = 1 })
+	return p
+end
+
+-- colonne de lumiere verticale (apparait large puis s'affine)
+function FX.beam(parent, ground, color, height, from, to, time, trans)
+	local p = FX.part(parent, "c", V3(height, from, from), CF(ground + V3(0, height / 2, 0)) * CFrame.Angles(0, 0, math.pi / 2), color, M.Neon, trans or 0.2, time + 0.25)
+	FX.tween(p, time, { Size = V3(height, to, to), Transparency = 1 }, Enum.EasingStyle.Quad, Enum.EasingDirection.In)
+	return p
+end
+
+-- etoile d'impact : fines lames lumineuses qui jaillissent dans toutes les directions
+function FX.spikes(parent, pos, color, count, length, time)
+	for _ = 1, count do
+		local rot = CFrame.Angles(math.random() * 6.28, math.random() * 6.28, math.random() * 6.28)
+		local p = FX.part(parent, "b", V3(0.55, 0.55, 1), CF(pos) * rot, color, M.Neon, 0, time + 0.25)
+		local len = length * (0.6 + math.random() * 0.6)
+		FX.tween(p, time, { Size = V3(0.08, 0.08, len), Transparency = 1 })
+	end
+end
+
+-- gerbe de particules. L'emetteur est allume un court instant puis coupe :
+-- plus fiable qu'un Emit() lance juste apres la creation de l'emetteur.
+function FX.sparks(parent, pos, color, count, speed, size, life, o)
+	o = o or {}
+	local holder = FX.part(parent, "b", V3(0.2, 0.2, 0.2), pos, WHITE, M.SmoothPlastic, 1, life + 0.8)
+	local pe = Instance.new("ParticleEmitter")
+	pe.Color = ColorSequence.new(color, o.fade or color)
+	pe.LightEmission = o.emission or 1
+	pe.Size = NumberSequence.new({ NumberSequenceKeypoint.new(0, size), NumberSequenceKeypoint.new(1, 0) })
+	pe.Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0), NumberSequenceKeypoint.new(0.7, 0.2), NumberSequenceKeypoint.new(1, 1) })
+	pe.Lifetime = NumberRange.new(life * 0.5, life)
+	pe.Speed = NumberRange.new(speed * 0.35, speed)
+	pe.SpreadAngle = Vector2.new(o.spread or 180, o.spread or 180)
+	pe.Drag = o.drag or 4
+	pe.Acceleration = o.accel or V3(0, -18, 0)
+	pe.Rotation = NumberRange.new(0, 360)
+	pe.RotSpeed = NumberRange.new(-180, 180)
+	pe.EmissionDirection = Enum.NormalId.Top
+	pe.Rate = count / (o.window or 0.15)
+	pe.Enabled = true
+	pe.Parent = holder
+	task.delay(o.window or 0.15, function()
+		pe.Enabled = false
+	end)
+	return holder
+end
+
+-- eclair de lumiere qui s'eteint
+function FX.light(parent, pos, color, brightness, range, time)
+	local holder = FX.part(parent, "b", V3(0.2, 0.2, 0.2), pos, WHITE, M.SmoothPlastic, 1, time + 0.25)
+	local l = Instance.new("PointLight")
+	l.Color = color
+	l.Brightness = brightness
+	l.Range = math.min(range, 60)
+	l.Shadows = false
+	l.Parent = holder
+	FX.tween(l, time, { Brightness = 0 })
+end
+
+-- flash colore sur un modele entier (surbrillance qui s'efface)
+function FX.flash(model, color, time, fill)
+	if not model or not model.Parent then return end
+	local h = Instance.new("Highlight")
+	h.Name = "FXFlash"
+	h.DepthMode = Enum.HighlightDepthMode.Occluded
+	h.FillColor = color
+	h.OutlineColor = color
+	h.FillTransparency = fill or 0.1
+	h.OutlineTransparency = 0
+	h.Parent = model
+	FX.tween(h, time, { FillTransparency = 1, OutlineTransparency = 1 }, Enum.EasingStyle.Quad, Enum.EasingDirection.In)
+	Debris:AddItem(h, time + 0.1)
+end
+
+-- aura de particules accrochee a une piece pendant une courte duree (charge d'attaque...)
+function FX.aura(part, color, rate, duration, size, speed, accel)
+	if not part or not part.Parent then return end
+	local pe = Instance.new("ParticleEmitter")
+	pe.Name = "FXAura"
+	pe.Color = ColorSequence.new(color, WHITE)
+	pe.LightEmission = 1
+	pe.Size = NumberSequence.new({ NumberSequenceKeypoint.new(0, size), NumberSequenceKeypoint.new(1, 0) })
+	pe.Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0.1), NumberSequenceKeypoint.new(1, 1) })
+	pe.Lifetime = NumberRange.new(0.4, 0.8)
+	pe.Speed = NumberRange.new(speed * 0.5, speed)
+	pe.SpreadAngle = Vector2.new(180, 180)
+	pe.Acceleration = accel or V3(0, 12, 0)
+	pe.Rate = rate
+	pe.Parent = part
+	task.delay(duration, function()
+		pe.Enabled = false
+	end)
+	Debris:AddItem(pe, duration + 1)
+end
+
+-- effet d'apparition / teleportation generique (anneau + eclat + etincelles)
+function FX.poof(parent, pos, color, scale)
+	scale = scale or 1
+	FX.burst(parent, pos, color, 1 * scale, 6 * scale, 0.35, 0.3)
+	FX.sparks(parent, pos, color, math.floor(14 * scale), 14 * scale, 0.4 * scale, 0.6)
+end
+
+-- texte flottant : jaillit avec un rebond, monte en derivant puis s'efface
+local function popText(parent, pos, text, color, big)
 	local p = Instance.new("Part")
 	p.Anchored = true
 	p.CanCollide = false
@@ -457,8 +632,10 @@ local function popText(parent, pos, text, color)
 	p.Size = V3(0.2, 0.2, 0.2)
 	p.Position = pos
 	p.Parent = parent
+	local w, h = 170, 42
+	if big then w, h = 320, 76 end
 	local bb = Instance.new("BillboardGui")
-	bb.Size = UDim2.new(0, 160, 0, 40)
+	bb.Size = UDim2.new(0, w * 0.2, 0, h * 0.2)
 	bb.AlwaysOnTop = true
 	bb.Parent = p
 	local l = Instance.new("TextLabel")
@@ -467,12 +644,46 @@ local function popText(parent, pos, text, color)
 	l.Text = text
 	l.TextColor3 = color or WHITE
 	l.Font = Enum.Font.GothamBlack
-	l.TextSize = 24
-	l.TextStrokeTransparency = 0.3
+	l.TextScaled = true
+	l.TextStrokeTransparency = 0
 	l.Parent = bb
-	TweenService:Create(p, TweenInfo.new(1, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { Position = pos + V3(0, 4, 0) }):Play()
-	TweenService:Create(l, TweenInfo.new(1, Enum.EasingStyle.Linear), { TextTransparency = 1, TextStrokeTransparency = 1 }):Play()
-	Debris:AddItem(p, 1.2)
+	local drift = V3((math.random() - 0.5) * 3, big and 6 or 4.5, (math.random() - 0.5) * 3)
+	FX.tween(bb, 0.25, { Size = UDim2.new(0, w, 0, h) }, Enum.EasingStyle.Back)
+	FX.tween(p, 1.15, { Position = pos + drift })
+	FX.tween(l, 0.4, { TextTransparency = 1, TextStrokeTransparency = 1 }, Enum.EasingStyle.Linear, nil, big and 1.0 or 0.75)
+	Debris:AddItem(p, big and 1.6 or 1.35)
+end
+
+-- arrivee / depart par teleportation : colonne de lumiere + onde au sol
+function FX.warp(pos, color, scale)
+	scale = scale or 1
+	local ground = pos - V3(0, 2.9, 0)
+	FX.beam(world, ground, color, 50, 6 * scale, 0.3, 0.7, 0.35)
+	FX.ring(world, ground + V3(0, 0.2, 0), color, 2, 18 * scale, 0.5)
+	FX.burst(world, pos, WHITE, 1, 7 * scale, 0.3, 0.2)
+	FX.sparks(world, pos, color, math.floor(24 * scale), 18, 0.45, 0.8, { accel = V3(0, 14, 0), fade = WHITE })
+	FX.light(world, pos, color, 6, 30, 0.6)
+end
+
+-- renaissance : pilier de lumiere, ondes successives et pluie d'etincelles autour du joueur
+function FX.rebirth(player)
+	local char = player.Character
+	local hrp = char and char:FindFirstChild("HumanoidRootPart")
+	if not hrp then return end
+	local pos = hrp.Position
+	local ground = pos - V3(0, 2.9, 0)
+	local c = Color3.fromRGB(200, 100, 255)
+	FX.beam(world, ground, c, 80, 9, 0.4, 1.6, 0.3)
+	FX.beam(world, ground, WHITE, 80, 3, 0.2, 1.2, 0.1)
+	for i = 0, 3 do
+		task.delay(i * 0.18, function()
+			FX.ring(world, ground + V3(0, 0.2, 0), (i % 2 == 0) and c or WHITE, 3, 26 + i * 8, 0.7)
+		end)
+	end
+	FX.sparks(world, pos, c, 90, 30, 0.7, 1.6, { accel = V3(0, 16, 0), fade = WHITE, window = 0.6 })
+	FX.light(world, pos, c, 10, 50, 1.4)
+	FX.flash(char, c, 1.2, 0.2)
+	popText(world, pos + V3(0, 6, 0), "RENAISSANCE !", c, true)
 end
 
 local function worldOfPosition(pos)
@@ -1447,6 +1658,7 @@ local function spawnPetVisual(player, petData, slot)
 
 	model.Parent = petsFolder
 	pcall(function() root:SetNetworkOwner(nil) end)
+	FX.poof(world, root.Position, rar.color, 0.8)
 
 	petVisuals[key] = {
 		model = model, body = root, hrp = hrp, owner = player, anims = P.anims, align = align,
@@ -1482,6 +1694,113 @@ end
 -- ============================================================
 -- HEARTBEAT : suivi des pets, animations, decor
 -- ============================================================
+
+-- Choregraphie des attaques (durees en secondes, distances en studs)
+--   wind = elan, dash = ruee jusqu'a l'impact, hold = pause sur l'impact, back = retour
+--   dist = distance de la ruee, pull = recul pendant l'elan, jump = hauteur du saut pendant la ruee
+--   rise = levitation (attaques a distance), spin = nombre de vrilles, hop = petit saut au retour
+--   pow = force du recul inflige a la cible
+FX.STYLES = {
+	melee        = { wind = 0.16, dash = 0.12, hold = 0.07, back = 0.36, dist = 12, pull = 1.8, jump = 0,   rise = 0,   spin = 0, hop = 1.2, pow = 2.5 },
+	crit         = { wind = 0.22, dash = 0.14, hold = 0.10, back = 0.40, dist = 12, pull = 2.6, jump = 1.5, rise = 0,   spin = 1, hop = 1.8, pow = 4.5 },
+	FireSlash    = { wind = 0.38, dash = 0.12, hold = 0.12, back = 0.42, dist = 12, pull = 2.6, jump = 0,   rise = 0,   spin = 2, hop = 2,   pow = 4.5 },
+	IceStorm     = { wind = 0.50, dash = 0.10, hold = 0.45, back = 0.45, dist = 0,  pull = 0,   jump = 0,   rise = 4.5, spin = 0, hop = 0,   pow = 3.5 },
+	DivineStrike = { wind = 0.40, dash = 0.45, hold = 0.14, back = 0.50, dist = 11, pull = 2,   jump = 11,  rise = 0,   spin = 1, hop = 3,   pow = 6.5 },
+	DarkSlam     = { wind = 0.40, dash = 0.40, hold = 0.14, back = 0.50, dist = 11, pull = 2,   jump = 9,   rise = 0,   spin = 0, hop = 2.5, pow = 6 },
+}
+
+-- Calcule la pose d'un pet d'arene a l'instant t : entree, attaque, recul, K.O., victoire.
+function FX.arenaPose(vis, t)
+	local fwd, up, pitch, yaw, roll = 0, 0, 0, 0, 0
+	local jx, jz = 0, 0
+
+	-- entree : chute depuis le ciel avec rebond et vrille
+	local sk = (t - vis.spawnT) / 0.7
+	if sk < 1 then
+		if sk < 0 then sk = 0 end
+		up = up + 12 * (1 - FX.bounceOut(sk))
+		yaw = yaw + (1 - sk) * (1 - sk) * math.pi * 3
+	end
+
+	-- attaque : elan -> ruee -> impact -> retour
+	local a = vis.act
+	if a then
+		local s = a.s
+		local u = t - a.t0
+		if u < s.wind then
+			local k = u / s.wind
+			local e = 1 - (1 - k) * (1 - k)
+			fwd = fwd - s.pull * e
+			up = up + s.rise * e
+			pitch = pitch + 0.3 * e
+		elseif u < s.wind + s.dash then
+			local k = (u - s.wind) / s.dash
+			fwd = fwd - s.pull + (s.dist + s.pull) * k * k
+			up = up + s.rise + math.sin(k * math.pi) * s.jump
+			pitch = pitch + 0.3 - 0.7 * k
+			yaw = yaw + s.spin * k * math.pi * 2
+		elseif u < s.wind + s.dash + s.hold then
+			fwd = fwd + s.dist
+			up = up + s.rise
+			pitch = pitch - 0.4
+		elseif u < s.wind + s.dash + s.hold + s.back then
+			local k = (u - s.wind - s.dash - s.hold) / s.back
+			local inv = (1 - k) * (1 - k) * (1 - k)
+			fwd = fwd + s.dist * inv
+			up = up + s.rise * inv + math.sin(k * math.pi) * s.hop
+			pitch = pitch - 0.4 * inv
+		else
+			vis.act = nil
+		end
+	end
+
+	-- coup recu : recul brusque, tete en arriere, tremblement
+	local h = vis.hit
+	if h then
+		local k = (t - h.t0) / 0.5
+		if k >= 1 then
+			vis.hit = nil
+		else
+			local out = math.min(k * 7, 1)
+			local decay = (1 - k) * (1 - k)
+			local force = math.min(h.pow / 3, 1.8)
+			fwd = fwd - h.pow * out * decay
+			pitch = pitch + 0.4 * out * decay * force
+			roll = roll + (math.random() - 0.5) * 0.3 * decay
+			jx = jx + (math.random() - 0.5) * 0.7 * decay * force
+			jz = jz + (math.random() - 0.5) * 0.7 * decay * force
+		end
+	end
+
+	if vis.dead then
+		local k = math.clamp((t - vis.dead) / 0.9, 0, 1)
+		if vis.deadMode == "recall" then
+			-- rappel : le pet s'envole en vrille
+			up = up + 14 * k * k
+			yaw = yaw + k * 10
+		else
+			-- K.O. : projete en arriere, il culbute
+			local e = 1 - (1 - k) * (1 - k)
+			fwd = fwd - 7 * e
+			up = up + math.sin(k * math.pi) * 3.5 - 1.5 * k * k
+			pitch = pitch + e * 1.6
+			roll = roll + e * 2.5
+		end
+	elseif vis.victoryT and t > vis.victoryT then
+		-- danse de victoire : sauts + pirouettes
+		local u = t - vis.victoryT
+		up = up + math.abs(math.sin(u * 5.5)) * 3
+		yaw = yaw + u * 5
+	elseif vis.low then
+		-- PV faibles : le pet tremble
+		jx = jx + (math.random() - 0.5) * 0.14
+		jz = jz + (math.random() - 0.5) * 0.14
+	end
+
+	local bob = math.sin(t * 2 + vis.phase) * (vis.bobAmp or 0.3)
+	roll = roll + math.sin(t * 1.3 + vis.phase) * 0.04
+	vis.root.CFrame = (vis.base * CFrame.Angles(pitch, yaw, roll)) + (vis.dir * fwd + V3(jx, up + bob, jz))
+end
 
 local decorAccum = 0
 
@@ -1542,19 +1861,7 @@ RunService.Heartbeat:Connect(function(dt)
 
 	for vis in pairs(arenaVis) do
 		if vis.root and vis.root.Parent then
-			local off = V3(0, 0, 0)
-			local lt = (t - (vis.lungeStart or -10)) / 0.4
-			if lt >= 0 and lt <= 1 then off = off + vis.dir * (math.sin(lt * math.pi) * 7) end
-			if vis.shakeUntil and t < vis.shakeUntil then
-				off = off + V3(math.random() - 0.5, 0, math.random() - 0.5) * 1.2
-			end
-			local spawnK = math.clamp((t - vis.spawnT) / 0.5, 0, 1)
-			off = off + V3(0, -3 * (1 - spawnK), 0)
-			if vis.dead then
-				off = off + V3(0, -math.clamp((t - vis.dead) / 0.8, 0, 1) * 3, 0)
-			end
-			local bobv = math.sin(t * 2 + vis.phase) * 0.3
-			vis.root.CFrame = vis.base * CF(0, bobv, 0) + off
+			FX.arenaPose(vis, t)
 		else
 			arenaVis[vis] = nil
 		end
@@ -1980,6 +2287,7 @@ local function usePortal(player, target)
 		notify(player, "Termine ton combat avant de voyager !", Color3.fromRGB(255, 120, 120))
 		return
 	end
+	local justUnlocked = false
 	if target > s.unlockedWorld then
 		if target ~= s.unlockedWorld + 1 then
 			notify(player, "Debloque d'abord le monde precedent !", Color3.fromRGB(255, 120, 120))
@@ -1997,13 +2305,23 @@ local function usePortal(player, target)
 		end
 		s.coins = s.coins - price
 		s.unlockedWorld = target
+		justUnlocked = true
 		notify(player, "Nouveau monde debloque : " .. WORLDS[target].name .. " !", Color3.fromRGB(255, 220, 80))
 		sendState(player)
 	end
 	sendWorldInfo(player)
 	sendNPCInfo(player)
+	local char = player.Character
+	local hrp = char and char:FindFirstChild("HumanoidRootPart")
+	local warpColor = justUnlocked and Color3.fromRGB(255, 220, 80) or Color3.fromRGB(140, 220, 255)
+	if hrp then FX.warp(hrp.Position, warpColor, 1) end
 	if teleportToWorld(player, target) then
 		notify(player, "Bienvenue : " .. WORLDS[target].name, Color3.fromRGB(120, 255, 180))
+		local arrive = worldOrigin[target] + V3(0, 3, 14)
+		FX.warp(arrive, warpColor, justUnlocked and 1.8 or 1.2)
+		if justUnlocked then
+			popText(world, arrive + V3(0, 7, 0), "NOUVEAU MONDE !", warpColor, true)
+		end
 	end
 end
 
@@ -2238,8 +2556,20 @@ local function collectCrystal(info, player, byPet)
 	local reward = math.floor(info.reward * mult * petBonus * (s.coinMult or 1))
 	s.coins = s.coins + reward
 	sendState(player)
-	popText(worldFolder[info.world], info.root.Position + V3(0, 3, 0), "+" .. fmt(reward), byPet and Color3.fromRGB(255, 220, 80) or WHITE)
+	local F = worldFolder[info.world]
+	local cpos = info.root.Position
+	local tint = info.tier and info.tier.tint
+	local ccol = tint or CRYSTAL_THEME[info.world].color
+	popText(F, cpos + V3(0, 3, 0), "+" .. fmt(reward), tint or (byPet and Color3.fromRGB(255, 220, 80) or WHITE), tint ~= nil)
 	info.emitter:Emit(25)
+	-- eclat du cristal : petit flash + etincelles (plus gros pour les cristaux rares)
+	FX.burst(F, cpos, ccol, 1.5, tint and 11 or 6, 0.3, 0.3)
+	FX.sparks(F, cpos, ccol, tint and 30 or 10, tint and 24 or 14, 0.4, 0.6)
+	if tint then
+		FX.ring(F, cpos - V3(0, 2.5, 0), tint, 2, 18, 0.5)
+		FX.light(F, cpos, tint, 6, 26, 0.5)
+		FX.spikes(F, cpos, tint, 6, 9, 0.3)
+	end
 	setCrystalVisible(info, false)
 	task.delay(crystalRng:NextNumber(CRYSTAL_RESPAWN_MIN, CRYSTAL_RESPAWN_MAX), function()
 		-- reapparait a un NOUVEL endroit aleatoire, avec une rarete tiree au hasard
@@ -2247,6 +2577,8 @@ local function collectCrystal(info, player, byPet)
 		if pos then placeCrystal(info, pos) end
 		applyCrystalTier(info, rollCrystalTier())
 		setCrystalVisible(info, true)
+		-- reapparition : la lumiere converge vers le cristal
+		FX.burst(worldFolder[info.world], info.root.Position, info.tier.tint or CRYSTAL_THEME[info.world].color, 7, 1, 0.45, 0.75)
 		info.busy = false
 	end)
 end
@@ -2324,65 +2656,64 @@ local function playHatch(eggIndex, pet)
 	local info = PETS[pet.name]
 	local rar = rarityInfo(info.rarity)
 	local F = worldFolder[EGGS[eggIndex].world]
+	local center = base.Position
+	local ground = center - V3(0, 2.8, 0)
+	-- plus l'animal est rare, plus l'eclosion est spectaculaire
+	local tier = (rar.halo and 3) or (rar.light and 2) or 1
 
-	-- secousses
-	for i = 1, 12 do
-		local k = (i % 2 == 0) and 1 or -1
-		root.CFrame = base * CF(0, 0.3 + i * 0.03, 0) * CFrame.Angles(0, 0, k * math.rad(5 + i * 1.6))
-		task.wait(0.07)
+	-- anticipation : l'oeuf s'eleve et tremble de plus en plus vite, la lumiere converge
+	FX.ring(F, ground, e.color, 16, 2, 1.0, 0.2, 0.5)
+	FX.light(F, center, rar.color, 2 + tier * 2, 24, 1.3)
+	for i = 1, 18 do
+		local k = i / 18
+		local side = (i % 2 == 0) and 1 or -1
+		root.CFrame = base * CF(0, 0.2 + k * 0.9, 0) * CFrame.Angles(0, k * 2, side * math.rad(4 + 22 * k * k))
+		if i % 4 == 0 then FX.sparks(F, center, e.color, 6, 8, 0.35, 0.5) end
+		task.wait(0.09 - 0.05 * k)
 	end
 	root.CFrame = base
 
-	-- flash + eclats de coquille
-	local flash = Instance.new("Part")
-	flash.Shape = Enum.PartType.Ball
-	flash.Size = V3(3, 3, 3)
-	flash.Anchored = true
-	flash.CanCollide = false
-	flash.CanTouch = false
-	flash.CanQuery = false
-	flash.Material = M.Neon
-	flash.Color = rar.color
-	flash.Position = base.Position
-	flash.Parent = F
-	TweenService:Create(flash, TweenInfo.new(0.6), { Size = V3(22, 22, 22), Transparency = 1 }):Play()
-	Debris:AddItem(flash, 0.8)
+	-- eclatement : flash, onde de choc, etincelles, eclats de coquille
 	for part in pairs(e.trans) do part.Transparency = 1 end
-	for i = 1, 10 do
-		local shard = Instance.new("Part")
-		shard.Size = V3(0.8, 0.5, 1.1)
-		shard.Color = e.color
-		shard.Material = M.Neon
-		shard.Anchored = true
-		shard.CanCollide = false
-		shard.CanTouch = false
-		shard.CanQuery = false
-		shard.Position = base.Position
-		shard.Parent = F
+	FX.burst(F, center, WHITE, 2, 10, 0.18, 0)
+	FX.burst(F, center, rar.color, 3, 16 + tier * 5, 0.6, 0.15)
+	FX.ring(F, ground, rar.color, 3, 20 + tier * 8, 0.6)
+	FX.sparks(F, center, rar.color, 30 + tier * 20, 22 + tier * 6, 0.6, 1.1, { fade = WHITE })
+	FX.light(F, center, rar.color, 6 + tier * 3, 30 + tier * 10, 0.7)
+	FX.spikes(F, center, rar.color, 4 + tier * 3, 10 + tier * 3, 0.35)
+	if tier >= 2 then
+		FX.beam(F, ground, rar.color, 60, 3 + tier * 2, 0.3, 1.1, 0.35)
+	end
+	if tier >= 3 then
+		for i = 1, 2 do
+			task.delay(i * 0.15, function()
+				FX.ring(F, ground, WHITE, 3, 30 + i * 12, 0.6)
+			end)
+		end
+	end
+	for i = 1, 12 do
 		local dir = V3(math.random() - 0.5, math.random() * 0.8 + 0.2, math.random() - 0.5).Unit
-		TweenService:Create(shard, TweenInfo.new(0.8, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-			Position = base.Position + dir * math.random(6, 11), Transparency = 1,
+		local shard = FX.part(F, "b", V3(0.8, 0.5, 1.1), CF(center), e.color, M.Neon, 0, 1)
+		FX.tween(shard, 0.8, {
+			Position = center + dir * math.random(6, 12), Transparency = 1,
 			Orientation = V3(math.random(0, 360), math.random(0, 360), math.random(0, 360))
-		}):Play()
-		Debris:AddItem(shard, 1)
+		})
 	end
 
-	-- apparition du pet
+	-- apparition du pet : il jaillit avec un effet ressort en tournoyant
 	local model, proot, P = createPetModel(pet.name, true, 1.5)
-	proot.CFrame = CF(base.Position + V3(0, 1.5, 0))
+	proot.CFrame = CF(center + V3(0, 1.5, 0))
 	model.Parent = F
 	staticAnimators[model] = P.anims
-	local burst = emitter(proot, rar.color, 0, 0.9, 1.4, 9)
-	burst.SpreadAngle = Vector2.new(180, 180)
-	burst.LightEmission = 1
-	burst:Emit(45)
+	FX.aura(proot, rar.color, 15 + tier * 15, 2.9, 0.5, 5, V3(0, 4, 0))
 
 	local bb = Instance.new("BillboardGui")
-	bb.Size = UDim2.new(0, 260, 0, 60)
+	bb.Size = UDim2.new(0, 52, 0, 12)
 	bb.StudsOffset = V3(0, 4 + P.scale * 2, 0)
 	bb.AlwaysOnTop = true
 	bb.Adornee = proot
 	bb.Parent = proot
+	FX.tween(bb, 0.35, { Size = UDim2.new(0, 260, 0, 60) }, Enum.EasingStyle.Back, nil, 0.25)
 	local nameL = Instance.new("TextLabel")
 	nameL.Size = UDim2.new(1, 0, 0.6, 0)
 	nameL.BackgroundTransparency = 1
@@ -2403,17 +2734,38 @@ local function playHatch(eggIndex, pet)
 	rarL.TextStrokeTransparency = 0.2
 	rarL.Parent = bb
 
+	-- les animaux les plus rares ont droit a leur feu d'artifice
+	if tier >= 2 then
+		for i = 1, tier * 2 do
+			task.delay(0.5 + i * 0.35, function()
+				local p = center + V3(math.random(-9, 9), math.random(7, 13), math.random(-9, 9))
+				FX.burst(F, p, rar.color, 1, 7, 0.35, 0.2)
+				FX.sparks(F, p, rar.color, 30, 24, 0.45, 1, { accel = V3(0, -20, 0), fade = WHITE })
+			end)
+		end
+	end
+
 	local t0 = os.clock()
 	while os.clock() - t0 < 3.2 do
-		local k = math.clamp((os.clock() - t0) / 0.8, 0, 1)
-		local ease = 1 - (1 - k) * (1 - k)
-		proot.CFrame = CF(base.Position + V3(0, 1.5 + 3.5 * ease, 0)) * CFrame.Angles(0, (os.clock() - t0) * 2, 0)
+		local u = os.clock() - t0
+		local k = math.clamp(u / 0.7, 0, 1)
+		local q = k - 1
+		local ease = 1 + 2.70158 * q * q * q + 1.70158 * q * q   -- depassement puis retour (ressort)
+		local spin = u * 2 + (1 - k) * (1 - k) * 8
+		local bob = math.sin(u * 3) * 0.25 * k
+		proot.CFrame = CF(center + V3(0, 1.5 + 3.5 * ease + bob, 0)) * CFrame.Angles(0, spin, 0)
 		task.wait(0.03)
 	end
+	FX.poof(F, proot.Position, rar.color, 1.2)
 	model:Destroy()
 	staticAnimators[model] = nil
 
-	for part, orig in pairs(e.trans) do part.Transparency = orig end
+	-- l'oeuf reapparait en douceur
+	for part, orig in pairs(e.trans) do
+		part.Transparency = 1
+		FX.tween(part, 0.4, { Transparency = orig })
+	end
+	FX.ring(F, ground, e.color, 2, 12, 0.4)
 	d.paused = false
 	e.busy = false
 end
@@ -2599,12 +2951,47 @@ local function buildArenaSlot(i)
 	local floor = makePart("ArenaFloor", V3(60, 2, 60), origin + V3(0, -1, 0), Color3.fromRGB(80, 80, 90), M.Slate, folder)
 	local ring = makePart("ArenaRing", V3(56, 0.5, 56), origin + V3(0, 0.5, 0), Color3.fromRGB(200, 180, 60), M.Neon, folder)
 	ring.CanCollide = false
+	-- scene sombre posee sur l'anneau : seul le bord lumineux depasse (il flashe a chaque gros coup)
+	local stage = makePart("ArenaStage", V3(51, 0.5, 51), origin + V3(0, 0.56, 0), Color3.fromRGB(50, 50, 60), M.Slate, folder)
+	local emblem = makeCyl("ArenaEmblem", 0.1, 13, origin + V3(0, 0.84, 0), Color3.fromRGB(200, 180, 60), M.Neon, folder)
+	emblem.CanCollide = false
+	emblem.Transparency = 0.6
+	local pads = {}
+	for _, sx in ipairs({ -10, 10 }) do
+		local pad = makeCyl("ArenaPad", 0.1, 8.5, origin + V3(sx, 0.85, 0), Color3.fromRGB(200, 180, 60), M.Neon, folder)
+		pad.CanCollide = false
+		pad.Transparency = 0.5
+		table.insert(pads, pad)
+	end
+	local torches = {}
 	for k = 1, 4 do
 		local a = ((k - 0.5) / 4) * math.pi * 2
-		makePart("ArenaPillar" .. k, V3(3, 14, 3), origin + V3(math.cos(a) * 27, 7, math.sin(a) * 27), Color3.fromRGB(60, 60, 70), M.Slate, folder)
+		local px, pz = math.cos(a) * 27, math.sin(a) * 27
+		makePart("ArenaPillar" .. k, V3(3, 14, 3), origin + V3(px, 7, pz), Color3.fromRGB(60, 60, 70), M.Slate, folder)
+		-- torche au sommet de chaque pilier
+		local orb = makePart("ArenaTorch" .. k, V3(2.4, 2.4, 2.4), origin + V3(px, 15.4, pz), Color3.fromRGB(200, 180, 60), M.Neon, folder)
+		orb.Shape = Enum.PartType.Ball
+		orb.CanCollide = false
+		local light = Instance.new("PointLight")
+		light.Range = 34
+		light.Brightness = 1.6
+		light.Parent = orb
+		local flame = emitter(orb, Color3.fromRGB(200, 180, 60), 14, 1.1, 1.1, 5)
+		torches[k] = { orb = orb, light = light, flame = flame }
 	end
+	-- poussieres lumineuses qui montent du sol
+	local dust = makePart("ArenaDust", V3(50, 0.2, 50), origin + V3(0, 1, 0), WHITE, M.SmoothPlastic, folder)
+	dust.Transparency = 1
+	dust.CanCollide = false
+	dust.CanTouch = false
+	dust.CanQuery = false
+	local motes = emitter(dust, Color3.fromRGB(200, 180, 60), 10, 0.3, 4, 2, 0.3)
+	motes.SpreadAngle = Vector2.new(10, 10)
 	makeWalls(folder, origin, 29, 20)
-	return { origin = origin, folder = folder, floor = floor, ring = ring, inUse = false }
+	return {
+		origin = origin, folder = folder, floor = floor, ring = ring, stage = stage, emblem = emblem,
+		pads = pads, torches = torches, motes = motes, ringColor = ring.Color, inUse = false
+	}
 end
 
 local function acquireArena(w)
@@ -2619,129 +3006,99 @@ local function acquireArena(w)
 	if not slot then return nil end
 	slot.inUse = true
 	local th = ARENA_THEME[w] or ARENA_THEME[1]
+	slot.ringColor = th.ring
 	slot.floor.Color = th.floor
 	slot.floor.Material = th.mat
 	slot.ring.Color = th.ring
+	slot.stage.Color = th.floor:Lerp(BLACK, 0.4)
+	slot.stage.Material = th.mat
+	slot.emblem.Color = th.ring
+	for _, pad in ipairs(slot.pads) do pad.Color = th.ring end
+	for _, tc in ipairs(slot.torches) do
+		tc.orb.Color = th.ring
+		tc.light.Color = th.ring
+		tc.flame.Color = ColorSequence.new(th.ring, WHITE)
+	end
+	slot.motes.Color = ColorSequence.new(th.ring)
 	return slot
 end
 
-local function hitBurst(folder, pos, color)
-	local p = Instance.new("Part")
-	p.Shape = Enum.PartType.Ball
-	p.Size = V3(2, 2, 2)
-	p.Anchored = true
-	p.CanCollide = false
-	p.CanTouch = false
-	p.CanQuery = false
-	p.Material = M.Neon
-	p.Color = color
-	p.Position = pos
-	p.Parent = folder
-	TweenService:Create(p, TweenInfo.new(0.35), { Size = V3(9, 9, 9), Transparency = 1 }):Play()
-	Debris:AddItem(p, 0.45)
-end
+-- ------------------------------------------------------------
+-- EFFETS DE COMBAT
+-- ------------------------------------------------------------
 
-local function spawnAttackEffect(folder, effectName, startPos, endPos, color)
-	if effectName == "FireSlash" then
-		local slash = Instance.new("Part")
-		slash.Anchored = true
-		slash.CanCollide = false
-		slash.CanTouch = false
-		slash.CanQuery = false
-		slash.Material = M.Neon
-		slash.Color = color
-		slash.Size = V3(0.5, 8, 0.5)
-		slash.CFrame = CFrame.lookAt(startPos, endPos) * CF(0, 0, -3)
-		slash.Parent = folder
-		TweenService:Create(slash, TweenInfo.new(0.35), { Size = V3(6, 12, 6), Transparency = 1, CFrame = slash.CFrame * CFrame.Angles(0, math.rad(45), 0) }):Play()
-		Debris:AddItem(slash, 0.5)
-		local fire = Instance.new("Part")
-		fire.Anchored = true
-		fire.CanCollide = false
-		fire.CanTouch = false
-		fire.CanQuery = false
-		fire.Material = M.Neon
-		fire.Color = Color3.fromRGB(255, 150, 50)
-		fire.Size = V3(4, 4, 4)
-		fire.Shape = Enum.PartType.Ball
-		fire.Position = endPos
-		fire.Parent = folder
-		TweenService:Create(fire, TweenInfo.new(0.5), { Size = V3(11, 11, 11), Transparency = 1 }):Play()
-		Debris:AddItem(fire, 0.6)
-	elseif effectName == "IceStorm" then
-		for i = 1, 8 do
-			local shard = Instance.new("Part")
-			shard.Anchored = true
-			shard.CanCollide = false
-			shard.CanTouch = false
-			shard.CanQuery = false
-			shard.Material = M.Ice
-			shard.Color = Color3.fromRGB(150, 220, 255)
-			shard.Size = V3(2, 6, 2)
-			shard.Position = endPos + V3(math.random(-4, 4), math.random(6, 11), math.random(-4, 4))
-			shard.Parent = folder
-			TweenService:Create(shard, TweenInfo.new(0.4), { Position = endPos, Size = V3(4, 8, 4), Transparency = 1 }):Play()
-			Debris:AddItem(shard, 0.5)
-		end
-		local circle = Instance.new("Part")
-		circle.Anchored = true
-		circle.CanCollide = false
-		circle.CanTouch = false
-		circle.CanQuery = false
-		circle.Material = M.Ice
-		circle.Color = Color3.fromRGB(100, 200, 255)
-		circle.Size = V3(1, 0.2, 1)
-		circle.Position = endPos - V3(0, 2, 0)
-		circle.Parent = folder
-		TweenService:Create(circle, TweenInfo.new(0.5), { Size = V3(14, 0.2, 14), Transparency = 1 }):Play()
-		Debris:AddItem(circle, 0.6)
-	elseif effectName == "DivineStrike" then
-		local col = Instance.new("Part")
-		col.Anchored = true
-		col.CanCollide = false
-		col.CanTouch = false
-		col.CanQuery = false
-		col.Material = M.Neon
-		col.Color = color
-		col.Shape = Enum.PartType.Cylinder
-		col.Size = V3(2, 2, 20)
-		col.CFrame = CF(endPos + V3(0, 8, 0)) * CFrame.Angles(0, 0, math.rad(90))
-		col.Parent = folder
-		TweenService:Create(col, TweenInfo.new(0.6), { Size = V3(30, 12, 12), Transparency = 1 }):Play()
-		Debris:AddItem(col, 0.7)
-		for i = 1, 3 do
-			task.delay(i * 0.1, function()
-				local ring = Instance.new("Part")
-				ring.Anchored = true
-				ring.CanCollide = false
-				ring.CanTouch = false
-				ring.CanQuery = false
-				ring.Material = M.Neon
-				ring.Color = Color3.fromRGB(255, 240, 100)
-				ring.Shape = Enum.PartType.Ball
-				ring.Size = V3(2, 2, 2)
-				ring.Position = endPos
-				ring.Parent = folder
-				TweenService:Create(ring, TweenInfo.new(0.4), { Size = V3(16, 16, 16), Transparency = 1 }):Play()
-				Debris:AddItem(ring, 0.5)
-			end)
-		end
+FX.COL = {
+	fire = Color3.fromRGB(255, 120, 30), ember = Color3.fromRGB(255, 225, 110),
+	ice = Color3.fromRGB(140, 215, 255), frost = Color3.fromRGB(225, 245, 255),
+	gold = Color3.fromRGB(255, 225, 90), dark = Color3.fromRGB(120, 15, 35),
+	red = Color3.fromRGB(255, 60, 60), crit = Color3.fromRGB(255, 240, 120),
+}
+
+-- couleur du flash sur la cible selon l'attaque
+FX.FLASHCOL = { FireSlash = FX.COL.fire, IceStorm = FX.COL.ice, DivineStrike = FX.COL.gold, DarkSlam = FX.COL.red }
+
+-- le bord lumineux de l'arene et les torches flashent puis reviennent a leur couleur
+function FX.arenaPulse(arena, color, time)
+	if not arena or not arena.ring.Parent then return end
+	time = time or 0.6
+	local base = arena.ringColor or color
+	arena.ring.Color = color:Lerp(WHITE, 0.5)
+	FX.tween(arena.ring, time, { Color = base })
+	arena.emblem.Color = color
+	FX.tween(arena.emblem, time, { Color = base })
+	for _, tc in ipairs(arena.torches) do
+		tc.light.Brightness = 5
+		FX.tween(tc.light, time, { Brightness = 1.6 })
 	end
 end
 
-local function killVis(b, side)
+-- barre de vie au-dessus du pet : baisse vite, suivie d'une trainee blanche plus lente
+function FX.setBar(vis, st)
+	local ratio = math.clamp(st.hp / math.max(1, st.maxHp), 0, 1)
+	vis.low = ratio > 0 and ratio < 0.25
+	if vis.ratio == ratio then return end
+	vis.ratio = ratio
+	local size = UDim2.new(ratio, 0, 1, 0)
+	FX.tween(vis.fill, 0.25, {
+		Size = size,
+		BackgroundColor3 = Color3.fromRGB(math.min(255, 255 * (1 - ratio) + 60), math.min(255, 200 * ratio + 30), 60)
+	})
+	FX.tween(vis.ghost, 0.5, { Size = size }, nil, nil, 0.3)
+end
+
+-- Retire un pet de l'arene. mode "ko" : projete en arriere, il culbute et s'efface.
+-- mode "recall" : rappele par son dresseur, il s'envole dans un rayon de lumiere.
+local function killVis(b, side, mode)
 	local vis = b.vis[side]
 	if not vis then return end
 	b.vis[side] = nil
 	vis.dead = os.clock()
+	vis.deadMode = mode or "ko"
+	local recall = vis.deadMode == "recall"
 	for _, d in ipairs(vis.model:GetDescendants()) do
 		if d:IsA("BasePart") then
-			TweenService:Create(d, TweenInfo.new(0.8), { Transparency = 1 }):Play()
-		elseif d:IsA("BillboardGui") or d:IsA("ParticleEmitter") then
+			FX.tween(d, 0.55, { Transparency = 1 }, Enum.EasingStyle.Quad, Enum.EasingDirection.In, recall and 0.05 or 0.3)
+		elseif d:IsA("ParticleEmitter") or d:IsA("Trail") then
+			d.Enabled = false
+		elseif d:IsA("BillboardGui") or d:IsA("PointLight") then
 			d:Destroy()
 		end
 	end
-	task.delay(1, function()
+	if b.arena and not b.closed and vis.root.Parent then
+		local folder = b.arena.folder
+		local pos = vis.root.Position
+		local ground = V3(pos.X, b.arena.origin.Y + 0.95, pos.Z)
+		if recall then
+			FX.beam(folder, ground, WHITE, 40, 4, 0.2, 0.5, 0.4)
+			FX.sparks(folder, pos, vis.color or WHITE, 16, 12, 0.4, 0.6, { accel = V3(0, 20, 0) })
+		else
+			FX.flash(vis.model, WHITE, 0.5, 0)
+			FX.burst(folder, pos, WHITE, 2, 10, 0.35, 0.3)
+			FX.sparks(folder, pos, Color3.fromRGB(230, 230, 255), 30, 10, 0.6, 1.2, { accel = V3(0, 14, 0), drag = 2 })
+			popText(folder, pos + V3(0, 6, 0), "K.O. !", Color3.fromRGB(255, 255, 255), true)
+		end
+	end
+	task.delay(1.1, function()
 		arenaVis[vis] = nil
 		staticAnimators[vis.model] = nil
 		pcall(function() vis.model:Destroy() end)
@@ -2750,6 +3107,7 @@ end
 
 local function cleanupArena(b)
 	if not b then return end
+	b.closed = true   -- les effets encore programmes ne se joueront plus
 	if b.vis then
 		for _, side in ipairs({ "player", "npc" }) do
 			local vis = b.vis[side]
@@ -2769,76 +3127,487 @@ local function cleanupArena(b)
 	if b.arena then b.arena.inUse = false end
 end
 
-local function updateArenaVisuals(b)
-	if not b or not b.arena then return end
+-- Fait entrer un pet dans l'arene : il tombe du ciel dans une colonne de lumiere et rebondit.
+function FX.spawnArenaPet(b, side, st, sidePos, face)
 	local origin = b.arena.origin
+	local folder = b.arena.folder
+	local model, root, P = createPetModel(st.name, true, 1.6)
+	local y = origin.Y + 0.9 + P.foot * P.scale + (P.flying and 2.5 or 0)
+	local pos = V3(sidePos.X, y, sidePos.Z)
+	local base = CFrame.lookAt(pos, pos + face)
+	root.CFrame = base + V3(0, 12, 0)
+	model.Parent = folder
+	staticAnimators[model] = P.anims
+
+	local bb = Instance.new("BillboardGui")
+	bb.Size = UDim2.new(0, 170, 0, 46)
+	bb.StudsOffset = V3(0, 3 + P.scale * 2, 0)
+	bb.AlwaysOnTop = true
+	bb.Adornee = root
+	bb.Parent = root
+	local nameL = Instance.new("TextLabel")
+	nameL.Size = UDim2.new(1, 0, 0, 22)
+	nameL.BackgroundTransparency = 1
+	nameL.Text = st.name
+	nameL.TextColor3 = rarityInfo(st.rarity).color
+	nameL.Font = Enum.Font.GothamBold
+	nameL.TextSize = 16
+	nameL.TextStrokeTransparency = 0.3
+	nameL.Parent = bb
+	local bg = Instance.new("Frame")
+	bg.Size = UDim2.new(1, -20, 0, 10)
+	bg.Position = UDim2.new(0, 10, 0, 28)
+	bg.BackgroundColor3 = Color3.fromRGB(30, 30, 40)
+	bg.BorderSizePixel = 0
+	bg.Parent = bb
+	local bgc = Instance.new("UICorner")
+	bgc.CornerRadius = UDim.new(0, 5)
+	bgc.Parent = bg
+	local ghost = Instance.new("Frame")
+	ghost.Size = UDim2.new(1, 0, 1, 0)
+	ghost.BackgroundColor3 = WHITE
+	ghost.BorderSizePixel = 0
+	ghost.ZIndex = 1
+	ghost.Parent = bg
+	local gc = Instance.new("UICorner")
+	gc.CornerRadius = UDim.new(0, 5)
+	gc.Parent = ghost
+	local fill = Instance.new("Frame")
+	fill.Size = UDim2.new(1, 0, 1, 0)
+	fill.BackgroundColor3 = Color3.fromRGB(80, 220, 100)
+	fill.BorderSizePixel = 0
+	fill.ZIndex = 2
+	fill.Parent = bg
+	local fc = Instance.new("UICorner")
+	fc.CornerRadius = UDim.new(0, 5)
+	fc.Parent = fill
+
+	-- trainee lumineuse (allumee pendant l'entree et les ruees)
+	local a0 = Instance.new("Attachment")
+	a0.Position = V3(0, root.Size.Y * 0.6, 0)
+	a0.Parent = root
+	local a1 = Instance.new("Attachment")
+	a1.Position = V3(0, -root.Size.Y * 0.6, 0)
+	a1.Parent = root
+	local petColor = colorFromTable(st.color)
+	local trail = Instance.new("Trail")
+	trail.Attachment0 = a0
+	trail.Attachment1 = a1
+	trail.Lifetime = 0.3
+	trail.LightEmission = 1
+	trail.FaceCamera = true
+	trail.Color = ColorSequence.new(petColor:Lerp(WHITE, 0.3), WHITE)
+	trail.Transparency = NumberSequence.new(0.15, 1)
+	trail.WidthScale = NumberSequence.new(1, 0.15)
+	trail.Parent = root
+	task.delay(0.6, function() trail.Enabled = false end)
+
+	local vis = {
+		model = model, root = root, base = base, ref = st, fill = fill, ghost = ghost,
+		dir = face, phase = math.random() * 6, spawnT = os.clock(), trail = trail,
+		color = petColor, bobAmp = P.flying and 0.35 or 0.14
+	}
+	b.vis[side] = vis
+	arenaVis[vis] = true
+	local startRatio = math.clamp(st.hp / math.max(1, st.maxHp), 0, 1)
+	fill.Size = UDim2.new(startRatio, 0, 1, 0)
+	ghost.Size = fill.Size
+	FX.setBar(vis, st)
+
+	local rar = rarityInfo(st.rarity)
+	local ground = V3(pos.X, origin.Y + 0.95, pos.Z)
+	FX.beam(folder, ground, rar.color, 45, 5, 0.3, 0.75, 0.45)
+	FX.ring(folder, ground, rar.color, 10, 1, 0.3, 0.2, 0.5)
+	task.delay(0.26, function()
+		if b.closed or not root.Parent then return end
+		FX.ring(folder, ground, WHITE, 2, 15, 0.4)
+		FX.sparks(folder, ground, rar.color, 18, 16, 0.45, 0.6, { spread = 70 })
+		FX.light(folder, pos, rar.color, 4, 20, 0.4)
+	end)
+	return vis
+end
+
+local function updateArenaVisuals(b)
+	if not b or not b.arena or b.closed then return end
+	local origin = b.arena.origin
+	local now = os.clock()
 	local sides = {
 		player = { st = b.playerPets[b.playerCurrent], pos = origin + V3(-10, 0, 0), face = V3(1, 0, 0) },
 		npc = { st = b.npcPets[b.npcCurrent], pos = origin + V3(10, 0, 0), face = V3(-1, 0, 0) },
 	}
 	for side, sd in pairs(sides) do
-		local st = sd.st
-		local vis = b.vis[side]
-		if vis and vis.ref ~= st then
-			killVis(b, side)
-			vis = nil
+		-- une animation est en cours de ce cote (coup, K.O., rappel) : on resynchronise juste apres
+		if not b.hold or (b.hold[side] or 0) <= now then
+			local st = sd.st
+			local vis = b.vis[side]
+			if vis and vis.ref ~= st then
+				killVis(b, side, (vis.ref.hp > 0) and "recall" or "ko")
+				vis = nil
+			end
+			if st and not vis and st.hp > 0 then
+				vis = FX.spawnArenaPet(b, side, st, sd.pos, sd.face)
+			end
+			if vis and st then FX.setBar(vis, st) end
 		end
-		if st and not vis and st.hp > 0 then
-			local model, root, P = createPetModel(st.name, true, 1.6)
-			local y = origin.Y + 0.9 + P.foot * P.scale + (P.flying and 2.5 or 0)
-			local pos = V3(sd.pos.X, y, sd.pos.Z)
-			local base = CFrame.lookAt(pos, pos + sd.face)
-			root.CFrame = base
-			model.Parent = b.arena.folder
-			staticAnimators[model] = P.anims
+	end
+end
 
-			local bb = Instance.new("BillboardGui")
-			bb.Size = UDim2.new(0, 170, 0, 46)
-			bb.StudsOffset = V3(0, 3 + P.scale * 2, 0)
-			bb.AlwaysOnTop = true
-			bb.Adornee = root
-			bb.Parent = root
-			local nameL = Instance.new("TextLabel")
-			nameL.Size = UDim2.new(1, 0, 0, 22)
-			nameL.BackgroundTransparency = 1
-			nameL.Text = st.name
-			nameL.TextColor3 = rarityInfo(st.rarity).color
-			nameL.Font = Enum.Font.GothamBold
-			nameL.TextSize = 16
-			nameL.TextStrokeTransparency = 0.3
-			nameL.Parent = bb
-			local bg = Instance.new("Frame")
-			bg.Size = UDim2.new(1, -20, 0, 10)
-			bg.Position = UDim2.new(0, 10, 0, 28)
-			bg.BackgroundColor3 = Color3.fromRGB(30, 30, 40)
-			bg.BorderSizePixel = 0
-			bg.Parent = bb
-			local bgc = Instance.new("UICorner")
-			bgc.CornerRadius = UDim.new(0, 5)
-			bgc.Parent = bg
-			local fill = Instance.new("Frame")
-			fill.Size = UDim2.new(1, 0, 1, 0)
-			fill.BackgroundColor3 = Color3.fromRGB(80, 220, 100)
-			fill.BorderSizePixel = 0
-			fill.Parent = bg
-			local fc = Instance.new("UICorner")
-			fc.CornerRadius = UDim.new(0, 5)
-			fc.Parent = fill
+-- ---------- preparation des attaques (pendant l'elan) ----------
 
-			vis = {
-				model = model, root = root, base = base, ref = st, fill = fill,
-				dir = sd.face, phase = math.random() * 6, spawnT = os.clock()
-			}
-			b.vis[side] = vis
-			arenaVis[vis] = true
+FX.WINDUP = {}
+
+function FX.WINDUP.melee(b, av, tv, o, s)
+	if not av then return end
+	local p = av.root.Position
+	FX.sparks(b.arena.folder, V3(p.X, b.arena.origin.Y + 1, p.Z), Color3.fromRGB(220, 220, 220), 8, 8, 0.5, 0.4, { emission = 0.2, spread = 80 })
+end
+
+function FX.WINDUP.crit(b, av, tv, o, s)
+	if not av then return end
+	FX.flash(av.model, FX.COL.crit, s.wind + 0.12, 0.5)
+	FX.aura(av.root, FX.COL.crit, 60, s.wind, 0.5, 6)
+end
+
+function FX.WINDUP.FireSlash(b, av, tv, o, s)
+	if not av then return end
+	local folder = b.arena.folder
+	local p = av.root.Position
+	FX.ring(folder, V3(p.X, b.arena.origin.Y + 0.95, p.Z), FX.COL.fire, 14, 2, s.wind, 0.2, 0.5)
+	FX.aura(av.root, FX.COL.fire, 90, s.wind + s.dash, 0.9, 8, V3(0, 22, 0))
+	FX.flash(av.model, FX.COL.fire, s.wind + 0.15, 0.45)
+	FX.light(folder, p, FX.COL.fire, 5, 24, s.wind + 0.3)
+end
+
+function FX.WINDUP.IceStorm(b, av, tv, o, s)
+	local folder = b.arena.folder
+	local groundY = b.arena.origin.Y + 0.95
+	if av then
+		local p = av.root.Position
+		FX.ring(folder, V3(p.X, groundY, p.Z), FX.COL.ice, 12, 2, s.wind, 0.2, 0.5)
+		FX.aura(av.root, FX.COL.ice, 70, s.wind + s.dash, 0.6, 7, V3(0, 6, 0))
+		FX.flash(av.model, FX.COL.ice, s.wind, 0.5)
+	end
+	if not tv then return end
+	local impact = s.wind + s.dash
+	local tp = tv.root.Position
+	-- nuage d'orage au-dessus de la cible
+	local cloud = FX.part(folder, "c", V3(1.4, 2, 2), CF(tp + V3(0, 17, 0)) * CFrame.Angles(0, 0, math.pi / 2), Color3.fromRGB(70, 100, 150), M.Neon, 0.45, impact + 1)
+	FX.tween(cloud, 0.35, { Size = V3(1.4, 20, 20) }, Enum.EasingStyle.Back)
+	FX.tween(cloud, 0.4, { Transparency = 1 }, nil, nil, impact + 0.35)
+	-- pluie d'eclats de glace
+	for i = 1, 9 do
+		task.delay(math.max(0, impact - 0.3 + i * 0.035), function()
+			if b.closed then return end
+			local a = i * 0.7
+			local r = 1 + (i % 3) * 1.6
+			local from = tp + V3(math.cos(a) * r * 1.6, 16, math.sin(a) * r * 1.6)
+			local to = V3(tp.X + math.cos(a) * r, groundY + 1.5, tp.Z + math.sin(a) * r)
+			local cf = CFrame.lookAt(from, to) * CFrame.Angles(-math.pi / 2, 0, 0)
+			local shard = FX.part(folder, "b", V3(0.8, 4.5, 0.8), cf, (i % 2 == 0) and FX.COL.ice or FX.COL.frost, M.Neon, 0.15, 0.45)
+			FX.tween(shard, 0.2, { CFrame = (cf - from) + to }, Enum.EasingStyle.Quad, Enum.EasingDirection.In)
+			task.delay(0.2, function()
+				if b.closed then return end
+				FX.burst(folder, to, FX.COL.frost, 1, 4, 0.2, 0.3)
+			end)
+		end)
+	end
+end
+
+function FX.WINDUP.DivineStrike(b, av, tv, o, s)
+	local folder = b.arena.folder
+	local gold = FX.COL.gold
+	if av then
+		local p = av.root.Position
+		FX.ring(folder, V3(p.X, b.arena.origin.Y + 0.95, p.Z), gold, 18, 2, s.wind, 0.2, 0.45)
+		FX.aura(av.root, gold, 100, s.wind + s.dash, 0.7, 9)
+		FX.flash(av.model, gold, s.wind + s.dash, 0.4)
+		FX.light(folder, p, gold, 6, 30, s.wind + 0.3)
+	end
+	if not tv then return end
+	-- cercle magique dans le ciel, au-dessus de la cible
+	local impact = s.wind + s.dash
+	local up = CF(tv.root.Position + V3(0, 15, 0)) * CFrame.Angles(0, 0, math.pi / 2)
+	local circle = FX.part(folder, "c", V3(0.2, 2, 2), up, gold, M.Neon, 0.35, impact + 0.6)
+	FX.tween(circle, 0.4, { Size = V3(0.2, 16, 16) }, Enum.EasingStyle.Back)
+	FX.tween(circle, 0.3, { Transparency = 1 }, nil, nil, impact + 0.2)
+	local inner = FX.part(folder, "c", V3(0.3, 1, 1), up, WHITE, M.Neon, 0.2, impact + 0.6)
+	FX.tween(inner, impact, { Size = V3(0.3, 9, 9) }, Enum.EasingStyle.Quad, Enum.EasingDirection.In)
+	FX.tween(inner, 0.3, { Transparency = 1 }, nil, nil, impact + 0.2)
+end
+
+function FX.WINDUP.DarkSlam(b, av, tv, o, s)
+	if not av then return end
+	local folder = b.arena.folder
+	local p = av.root.Position
+	FX.ring(folder, V3(p.X, b.arena.origin.Y + 0.95, p.Z), FX.COL.red, 16, 2, s.wind, 0.2, 0.45)
+	FX.aura(av.root, FX.COL.red, 90, s.wind + s.dash, 0.8, 8)
+	FX.flash(av.model, FX.COL.red, s.wind + s.dash, 0.4)
+	FX.light(folder, p, FX.COL.red, 6, 28, s.wind + 0.3)
+end
+
+-- ---------- impacts ----------
+
+FX.IMPACT = {}
+
+function FX.IMPACT.melee(b, tv, pos, ground, o)
+	local folder = b.arena.folder
+	local c = o.color
+	local k = o.crit and 1.5 or 1
+	FX.burst(folder, pos, WHITE, 1.5, 5 * k, 0.14, 0)
+	FX.burst(folder, pos, c, 2, 9 * k, 0.32, 0.3)
+	FX.ring(folder, ground, c, 2, 15 * k, 0.4)
+	FX.sparks(folder, pos, c, o.crit and 40 or 22, 26 * k, 0.5, 0.5)
+	FX.light(folder, pos, c, 5 * k, 22, 0.3)
+	if o.crit then
+		FX.spikes(folder, pos, FX.COL.crit, 9, 13, 0.3)
+		FX.arenaPulse(b.arena, FX.COL.crit, 0.5)
+	end
+end
+FX.IMPACT.crit = FX.IMPACT.melee
+
+function FX.IMPACT.FireSlash(b, tv, pos, ground, o)
+	local folder = b.arena.folder
+	local fire, ember = FX.COL.fire, FX.COL.ember
+	-- trois entailles enflammees
+	for i = 1, 3 do
+		local cf = CF(pos) * CFrame.Angles((i - 2) * 0.7, 0, (i - 2) * 0.7)
+		local blade = FX.part(folder, "b", V3(0.5, 2, 0.5), cf, (i == 2) and ember or fire, M.Neon, 0, 0.6)
+		FX.tween(blade, 0.28, { Size = V3(0.1, 18, 0.1), Transparency = 1 }, nil, nil, (i - 1) * 0.05)
+	end
+	FX.burst(folder, pos, ember, 2, 7, 0.16, 0)
+	FX.burst(folder, pos, fire, 3, 13, 0.45, 0.25)
+	FX.beam(folder, ground, fire, 24, 6, 0.4, 0.55, 0.3)
+	FX.ring(folder, ground, fire, 3, 22, 0.5)
+	FX.ring(folder, ground, Color3.fromRGB(70, 25, 10), 6, 14, 1.2, 0.15, 0.2)
+	FX.sparks(folder, pos, fire, 55, 22, 1.1, 0.8, { accel = V3(0, 26, 0), fade = Color3.fromRGB(255, 60, 20), drag = 2 })
+	FX.sparks(folder, pos, ember, 30, 34, 0.35, 0.9)
+	FX.light(folder, pos, fire, 9, 34, 0.5)
+	FX.arenaPulse(b.arena, fire, 0.7)
+end
+
+function FX.IMPACT.IceStorm(b, tv, pos, ground, o)
+	local folder = b.arena.folder
+	local ice, frost = FX.COL.ice, FX.COL.frost
+	FX.burst(folder, pos, frost, 2, 11, 0.3, 0.2)
+	FX.ring(folder, ground, ice, 3, 24, 0.55)
+	FX.ring(folder, ground, frost, 2, 14, 0.9, 0.15, 0.35)
+	-- pics de glace qui jaillissent du sol autour de la cible
+	for i = 1, 7 do
+		local a = (i / 7) * 6.28 + math.random() * 0.4
+		local r = 2.2 + math.random() * 2
+		local h = 5 + math.random() * 4
+		local cf = CF(ground + V3(math.cos(a) * r, -0.4, math.sin(a) * r)) * CFrame.Angles(math.sin(a) * 0.35, 0, -math.cos(a) * 0.35)
+		local spike = FX.part(folder, "b", V3(1.3, 0.4, 1.3), cf, (i % 2 == 0) and ice or frost, M.Ice, 0.1, 1.7)
+		FX.tween(spike, 0.16, { Size = V3(1.5, h, 1.5), CFrame = cf * CF(0, h / 2, 0) }, Enum.EasingStyle.Back, nil, i * 0.02)
+		FX.tween(spike, 0.45, { Transparency = 1 }, nil, nil, 1.1)
+	end
+	FX.sparks(folder, pos + V3(0, 3, 0), frost, 45, 12, 0.5, 1.2, { accel = V3(0, -8, 0), drag = 2 })
+	FX.light(folder, pos, ice, 7, 30, 0.6)
+	FX.arenaPulse(b.arena, ice, 0.8)
+end
+
+function FX.IMPACT.DivineStrike(b, tv, pos, ground, o)
+	local folder = b.arena.folder
+	local gold = FX.COL.gold
+	-- rayon celeste : jaillit large puis s'affine
+	local cf = CF(ground + V3(0, 35, 0)) * CFrame.Angles(0, 0, math.pi / 2)
+	local beam = FX.part(folder, "c", V3(70, 1.5, 1.5), cf, gold, M.Neon, 0.15, 1)
+	FX.tween(beam, 0.1, { Size = V3(70, 11, 11) }, Enum.EasingStyle.Back)
+	task.delay(0.13, function()
+		if beam.Parent then
+			FX.tween(beam, 0.5, { Size = V3(70, 0.2, 0.2), Transparency = 1 }, Enum.EasingStyle.Quad, Enum.EasingDirection.In)
 		end
-		if vis and st then
-			local ratio = math.clamp(st.hp / st.maxHp, 0, 1)
-			TweenService:Create(vis.fill, TweenInfo.new(0.3), {
-				Size = UDim2.new(ratio, 0, 1, 0),
-				BackgroundColor3 = Color3.fromRGB(255 * (1 - ratio) + 60, 200 * ratio + 30, 60)
-			}):Play()
+	end)
+	local core = FX.part(folder, "c", V3(70, 0.8, 0.8), cf, WHITE, M.Neon, 0, 0.8)
+	FX.tween(core, 0.45, { Size = V3(70, 6, 6), Transparency = 1 })
+	FX.burst(folder, pos, WHITE, 3, 15, 0.2, 0)
+	FX.burst(folder, pos, gold, 4, 26, 0.55, 0.3)
+	for i = 0, 2 do
+		task.delay(i * 0.1, function()
+			if b.closed then return end
+			FX.ring(folder, ground, (i == 1) and WHITE or gold, 3, 26 + i * 9, 0.55)
+		end)
+	end
+	FX.spikes(folder, pos, gold, 12, 18, 0.4)
+	FX.sparks(folder, pos, gold, 80, 42, 0.6, 1.1, { fade = WHITE })
+	FX.sparks(folder, pos + V3(0, 14, 0), gold, 40, 6, 0.45, 1.8, { accel = V3(0, -10, 0), drag = 1, window = 0.5 })
+	FX.light(folder, pos, gold, 14, 60, 0.7)
+	FX.arenaPulse(b.arena, gold, 1)
+end
+
+function FX.IMPACT.DarkSlam(b, tv, pos, ground, o)
+	local folder = b.arena.folder
+	local red, dark = FX.COL.red, FX.COL.dark
+	FX.burst(folder, pos, red, 2, 9, 0.16, 0)
+	FX.burst(folder, pos, dark, 16, 3, 0.3, 0.6)
+	FX.ring(folder, ground, red, 3, 26, 0.5)
+	task.delay(0.12, function()
+		if b.closed then return end
+		FX.ring(folder, ground, dark, 3, 34, 0.6)
+	end)
+	-- fissures rougeoyantes dans le sol
+	for i = 1, 8 do
+		local rot = CF(ground) * CFrame.Angles(0, (i / 8) * 6.28 + math.random() * 0.5, 0)
+		local len = 6 + math.random() * 7
+		local crack = FX.part(folder, "b", V3(0.5, 0.15, 0.6), rot, red, M.Neon, 0, 1.6)
+		FX.tween(crack, 0.18, { Size = V3(0.5, 0.15, len), CFrame = rot * CF(0, 0, -len / 2) })
+		FX.tween(crack, 0.5, { Transparency = 1 }, nil, nil, 0.95)
+	end
+	FX.spikes(folder, pos, red, 9, 14, 0.35)
+	FX.sparks(folder, pos, red, 60, 34, 0.55, 0.9, { fade = dark })
+	FX.light(folder, pos, red, 10, 44, 0.6)
+	FX.arenaPulse(b.arena, red, 0.9)
+end
+
+-- moment de l'impact : la cible recule, flashe, perd ses PV (et tombe K.O. si besoin)
+function FX.impact(b, toSide, tv, o, s, ko)
+	if not tv or b.vis[toSide] ~= tv or not tv.root.Parent then return end
+	local folder = b.arena.folder
+	local pos = tv.root.Position
+	local ground = V3(pos.X, b.arena.origin.Y + 0.95, pos.Z)
+	tv.hit = { t0 = os.clock(), pow = s.pow }
+	local fc = FX.FLASHCOL[o.style]
+	FX.flash(tv.model, fc or WHITE, fc and 0.7 or 0.3)
+	FX.setBar(tv, tv.ref);
+	(FX.IMPACT[o.style] or FX.IMPACT.melee)(b, tv, pos, ground, o)
+	local special = o.style ~= "melee" and o.style ~= "crit"
+	popText(folder, pos + V3(0, 4, 0), "-" .. fmt(o.damage), (toSide == "npc") and Color3.fromRGB(255, 240, 120) or Color3.fromRGB(255, 90, 90), o.crit or special)
+	if o.crit then
+		popText(folder, pos + V3(0, 7.5, 0), "CRITIQUE !", Color3.fromRGB(255, 170, 40))
+	end
+	if ko then killVis(b, toSide, "ko") end
+end
+
+-- Lance toute la sequence d'une attaque : elan, ruee, impact, retour.
+-- Les degats sont deja appliques par la logique du combat ; ici on ne fait que le spectacle.
+-- Renvoie (delai avant l'impact, duree totale, cible K.O. ?).
+function FX.strike(b, fromSide, o, target)
+	local toSide = (fromSide == "player") and "npc" or "player"
+	local s = FX.STYLES[o.style] or FX.STYLES.melee
+	local impact = s.wind + s.dash
+	local total = impact + s.hold + s.back
+	local ko = target ~= nil and target.hp <= 0
+	local now = os.clock()
+	b.hold = b.hold or {}
+	-- un pet manquant (entree pas encore jouee) : on le fait apparaitre tout de suite
+	if not b.vis[fromSide] or (not b.vis[toSide] and not ko) then
+		b.hold[fromSide], b.hold[toSide] = 0, 0
+		updateArenaVisuals(b)
+	end
+	local av, tv = b.vis[fromSide], b.vis[toSide]
+	local holdFor = impact + (ko and 0.85 or 0.05)
+	b.hold[toSide] = now + holdFor
+	b.busyUntil = now + impact + (ko and 0.8 or 0.05)
+	if av then
+		av.act = { t0 = now, s = s }
+		if av.trail then
+			av.trail.Enabled = true
+			task.delay(impact + 0.2, function()
+				if av.trail.Parent then av.trail.Enabled = false end
+			end)
 		end
+	end
+	local windup = FX.WINDUP[o.style] or FX.WINDUP.melee
+	windup(b, av, tv, o, s)
+	task.delay(impact, function()
+		if b.closed then return end
+		FX.impact(b, toSide, tv, o, s, ko)
+	end)
+	task.delay(holdFor + 0.03, function()
+		if not b.closed then updateArenaVisuals(b) end
+	end)
+	return impact, total, ko
+end
+
+-- petites animations du dresseur adverse (ordre d'attaque, saut, chute...)
+function FX.trainerNudge(b, kind)
+	local root, base = b.trainerRoot, b.trainerBase
+	if b.closed or b.trainerDown or not root or not root.Parent then return end
+	local function back(after, time, style)
+		task.delay(after, function()
+			if root.Parent and not b.trainerDown and not b.closed then
+				FX.tween(root, time, { CFrame = base }, style)
+			end
+		end)
+	end
+	if kind == "command" then
+		FX.tween(root, 0.14, { CFrame = base * CF(0, 0.4, -1.6) * CFrame.Angles(-0.3, 0, 0) })
+		back(0.3, 0.3)
+	elseif kind == "flinch" then
+		FX.tween(root, 0.1, { CFrame = base * CF(0, 0, 1.2) * CFrame.Angles(0.25, 0, 0.1) })
+		back(0.28, 0.3)
+	elseif kind == "hop" then
+		FX.tween(root, 0.18, { CFrame = base * CF(0, 3, 0) })
+		back(0.2, 0.35, Enum.EasingStyle.Bounce)
+	elseif kind == "fall" then
+		b.trainerDown = true
+		FX.tween(root, 0.7, { CFrame = base * CF(0, -1.6, 2.5) * CFrame.Angles(1.45, 0, 0) }, Enum.EasingStyle.Bounce)
+	end
+end
+
+-- debut du combat : le dresseur bondit et lance son defi
+function FX.battleIntro(b, npc)
+	task.delay(0.4, function()
+		if b.closed then return end
+		local folder = b.arena.folder
+		FX.trainerNudge(b, "hop")
+		if b.trainerBase then
+			local tp = b.trainerBase.Position
+			FX.ring(folder, V3(tp.X, b.arena.origin.Y + 0.95, tp.Z), FX.COL.red, 2, 18, 0.6)
+			popText(folder, tp + V3(0, 6, 0), npc.name .. " !", Color3.fromRGB(255, 110, 110), true)
+		end
+		FX.arenaPulse(b.arena, WHITE, 1)
+	end)
+end
+
+-- fin du combat : feux d'artifice et danse de victoire, ou triomphe de l'adversaire
+function FX.celebrate(b, won, reward)
+	if b.closed then return end
+	local arena = b.arena
+	local folder, origin = arena.folder, arena.origin
+	if not won then
+		local ev = b.vis.npc
+		if ev then ev.victoryT = os.clock() end
+		FX.trainerNudge(b, "hop")
+		FX.arenaPulse(arena, FX.COL.dark, 1.2)
+		return
+	end
+	local colors = {
+		Color3.fromRGB(255, 225, 90), Color3.fromRGB(255, 90, 120), Color3.fromRGB(90, 200, 255),
+		Color3.fromRGB(120, 255, 140), Color3.fromRGB(210, 120, 255),
+	}
+	local pv = b.vis.player
+	if pv then
+		pv.victoryT = os.clock()
+		popText(folder, pv.root.Position + V3(0, 7, 0), "VICTOIRE !", colors[1], true)
+		if reward then
+			task.delay(0.6, function()
+				if b.closed or not pv.root.Parent then return end
+				popText(folder, pv.root.Position + V3(0, 5, 0), "+" .. fmt(reward) .. " coins", Color3.fromRGB(255, 240, 150))
+			end)
+		end
+	end
+	FX.trainerNudge(b, "fall")
+	-- feux d'artifice
+	for i = 1, 8 do
+		task.delay(i * 0.3, function()
+			if b.closed then return end
+			local c = colors[(i % #colors) + 1]
+			local p = origin + V3(math.random(-20, 20), math.random(12, 20), math.random(-14, 14))
+			FX.burst(folder, p, c, 1, 9, 0.4, 0.2)
+			FX.sparks(folder, p, c, 45, 30, 0.5, 1.2, { accel = V3(0, -22, 0), drag = 3 })
+			FX.light(folder, p, c, 6, 40, 0.5)
+		end)
+	end
+	-- pluie de confettis
+	for i, c in ipairs(colors) do
+		FX.sparks(folder, origin + V3((i - 3) * 8, 18, 0), c, 45, 10, 0.5, 2.6, { accel = V3(0, -9, 0), drag = 1, emission = 0.3, window = 1.4 })
+	end
+	-- le bord de l'arene passe par toutes les couleurs
+	for i = 0, 6 do
+		task.delay(i * 0.45, function()
+			if not b.closed then FX.arenaPulse(arena, colors[(i % #colors) + 1], 0.45) end
+		end)
 	end
 end
 
@@ -2847,7 +3616,9 @@ local function returnPlayerFromArena(player, b)
 	local target = b.originalCFrame
 	task.spawn(function()
 		if target and player.Parent and player.Character then
-			safeTeleport(player, target)
+			if safeTeleport(player, target) then
+				FX.poof(world, target.Position, WHITE, 1.4)
+			end
 		end
 		cleanupArena(b)
 	end)
@@ -2862,13 +3633,18 @@ local function sendBattleUpdate(player)
 	if not b then return end
 	updateArenaVisuals(b)
 	local myPet = b.playerPets[b.playerCurrent]
+	-- fx decrit l'animation en cours (qui frappe, quel style, dans combien de temps tombe l'impact...)
+	-- pour que l'interface du client reste synchronisee avec l'arene.
+	local fx = b.fx
+	b.fx = nil
 	BattleUpdate:FireClient(player, {
 		playerPets = b.playerPets, npcPets = b.npcPets,
 		playerCurrent = b.playerCurrent, npcCurrent = b.npcCurrent,
 		turn = b.turn, log = b.log, active = b.active,
 		playerCharge = myPet and myPet.charge or 0,
 		playerMaxCharge = myPet and myPet.maxCharge or 100,
-		playerCanSuper = myPet and myPet.charge >= myPet.maxCharge or false
+		playerCanSuper = myPet and myPet.charge >= myPet.maxCharge or false,
+		fx = fx, arena = b.arena and b.arena.origin or nil
 	})
 end
 
@@ -2891,6 +3667,7 @@ local function battlePayload(b)
 		playerCharge = myPet and myPet.charge or 0,
 		playerMaxCharge = myPet and myPet.maxCharge or 100,
 		playerCanSuper = myPet and myPet.charge >= myPet.maxCharge or false,
+		arena = b.arena and b.arena.origin or nil,
 	}
 end
 
@@ -2900,6 +3677,7 @@ local function abortBattle(player, reason, silent)
 	if not b or b.finishing then return end
 	b.active = false
 	b.log = reason or "Defaite... Combat interrompu."
+	b.fx = { kind = "end", result = (reason and string.find(reason, "fui", 1, true)) and "flee" or "lose" }
 	if not silent then sendBattleUpdate(player) end
 	finishBattle(player, b, silent and 0 or 1.5)
 end
@@ -2935,17 +3713,15 @@ local function processNPCAttack(player, expected)
 	end
 	myPet.hp = math.max(0, myPet.hp - damage)
 
-	local ev, pv = b.vis.npc, b.vis.player
-	if ev then ev.lungeStart = os.clock() end
-	if pv then
-		pv.shakeUntil = os.clock() + 0.35
-		hitBurst(b.arena.folder, pv.root.Position, isSuper and Color3.fromRGB(255, 80, 80) or Color3.fromRGB(255, 220, 150))
-		popText(b.arena.folder, pv.root.Position + V3(0, 4, 0), "-" .. damage, Color3.fromRGB(255, 90, 90))
-	end
+	-- spectacle : le dresseur donne l'ordre, son pet charge, l'impact arrive apres l'elan
+	local style = isSuper and "DarkSlam" or (crit and "crit" or "melee")
+	local color = isSuper and FX.COL.red or colorFromTable(enemyPet.color):Lerp(WHITE, 0.35)
+	FX.trainerNudge(b, "command")
+	local impact, _, ko = FX.strike(b, "npc", { damage = damage, crit = crit, style = style, color = color }, myPet)
+	b.fx = { kind = "strike", actor = "npc", style = style, damage = damage, crit = crit, ko = ko, impact = impact, color = color }
 
 	if myPet.hp <= 0 then
 		b.log = b.log .. " " .. myPet.name .. " est K.O. !"
-		killVis(b, "player")
 		local nxt = firstAlive(b.playerPets)
 		if nxt then
 			b.playerCurrent = nxt
@@ -2954,8 +3730,10 @@ local function processNPCAttack(player, expected)
 		else
 			b.active = false
 			b.log = "Defaite... Reessaie quand tu seras plus fort !"
+			b.fx.result = "lose"
 			sendBattleUpdate(player)
-			finishBattle(player, b, 2.5)
+			task.delay(impact + 0.6, function() FX.celebrate(b, false) end)
+			finishBattle(player, b, impact + 3.8)
 			return
 		end
 	else
@@ -2964,9 +3742,10 @@ local function processNPCAttack(player, expected)
 	sendBattleUpdate(player)
 end
 
-local function winBattle(player, b)
+local function winBattle(player, b, impact)
 	local s = states[player.UserId]
 	local npc = NPC_TRAINERS[b.npcIndex]
+	impact = impact or 0
 	if s then
 		local already = false
 		for _, idx in ipairs(s.defeatedNPCs) do
@@ -2977,45 +3756,39 @@ local function winBattle(player, b)
 		b.log = "VICTOIRE ! Tu gagnes " .. npc.reward .. " coins !"
 	end
 	b.active = false
-	local pv = b.vis.player
-	if pv then
-		local conf = emitter(pv.root, Color3.fromRGB(255, 230, 100), 0, 0.8, 2, 14)
-		conf.SpreadAngle = Vector2.new(180, 180)
-		conf:Emit(80)
-		popText(b.arena.folder, pv.root.Position + V3(0, 5, 0), "VICTOIRE !", Color3.fromRGB(255, 230, 100))
-	end
+	b.fx = b.fx or { kind = "end" }
+	b.fx.result = "win"
+	b.fx.reward = npc.reward
 	sendBattleUpdate(player)
 	sendState(player)
 	sendNPCInfo(player)
-	finishBattle(player, b, 3)
+	-- la fete commence une fois le dernier monstre a terre
+	task.delay(impact + 0.75, function() FX.celebrate(b, true, npc.reward) end)
+	finishBattle(player, b, impact + 4.2)
 end
 
-local function resolvePlayerStrike(player, b, damage, text, effectName, effectColor)
+local function resolvePlayerStrike(player, b, damage, text, style, color, crit)
 	local myPet = b.playerPets[b.playerCurrent]
 	local enemyPet = b.npcPets[b.npcCurrent]
 	enemyPet.hp = math.max(0, enemyPet.hp - damage)
 	b.log = text
 
-	local pv, ev = b.vis.player, b.vis.npc
-	if pv then pv.lungeStart = os.clock() end
-	if ev then
-		ev.shakeUntil = os.clock() + 0.35
-		if effectName and pv then
-			spawnAttackEffect(b.arena.folder, effectName, pv.root.Position, ev.root.Position, effectColor)
-		end
-		hitBurst(b.arena.folder, ev.root.Position, effectColor or Color3.fromRGB(255, 240, 200))
-		popText(b.arena.folder, ev.root.Position + V3(0, 4, 0), "-" .. damage, Color3.fromRGB(255, 240, 120))
-	end
+	style = style or (crit and "crit" or "melee")
+	color = color or colorFromTable(myPet.color):Lerp(WHITE, 0.35)
+	local impact, total, ko = FX.strike(b, "player", { damage = damage, crit = crit, style = style, color = color }, enemyPet)
+	b.fx = { kind = "strike", actor = "player", style = style, damage = damage, crit = crit, ko = ko, impact = impact, color = color }
 
 	if enemyPet.hp <= 0 then
 		b.log = b.log .. " " .. enemyPet.name .. " est K.O. !"
-		killVis(b, "npc")
+		task.delay(impact, function()
+			if not b.closed then FX.trainerNudge(b, "flinch") end
+		end)
 		if b.npcCurrent < #b.npcPets then
 			b.npcCurrent = b.npcCurrent + 1
 			b.log = b.log .. " " .. NPC_TRAINERS[b.npcIndex].name .. " envoie " .. b.npcPets[b.npcCurrent].name .. " !"
 			b.turn = "npc"
 		else
-			winBattle(player, b)
+			winBattle(player, b, impact)
 			return
 		end
 	else
@@ -3023,13 +3796,15 @@ local function resolvePlayerStrike(player, b, damage, text, effectName, effectCo
 	end
 	sendBattleUpdate(player)
 	if b.active and b.turn == "npc" then
-		task.delay(1.2, function() processNPCAttack(player, b) end)
+		-- l'adversaire attend la fin de l'animation (et l'entree de son nouveau pet apres un K.O.)
+		task.delay(total + 0.5 + (ko and 0.9 or 0), function() processNPCAttack(player, b) end)
 	end
 end
 
 local function processPlayerAttack(player)
 	local b = battles[player.UserId]
 	if not b or not b.active or b.turn ~= "player" then return end
+	if os.clock() < (b.busyUntil or 0) then return end   -- une animation est encore en cours
 	local myPet = b.playerPets[b.playerCurrent]
 	local enemyPet = b.npcPets[b.npcCurrent]
 	if not myPet or not enemyPet then return end
@@ -3037,7 +3812,7 @@ local function processPlayerAttack(player)
 	myPet.charge = math.min(myPet.maxCharge, myPet.charge + 33)
 	local crit = math.random() < 0.12
 	if crit then damage = math.floor(damage * 1.5) end
-	resolvePlayerStrike(player, b, damage, myPet.name .. " inflige " .. damage .. " degats !" .. (crit and " COUP CRITIQUE !" or "") .. " (Charge +33%)", nil, nil)
+	resolvePlayerStrike(player, b, damage, myPet.name .. " inflige " .. damage .. " degats !" .. (crit and " COUP CRITIQUE !" or "") .. " (Charge +33%)", nil, nil, crit)
 end
 
 local SPECIAL_ATTACKS = {
@@ -3049,6 +3824,7 @@ local SPECIAL_ATTACKS = {
 local function processPlayerSpecial(player, specialIndex)
 	local b = battles[player.UserId]
 	if not b or not b.active or b.turn ~= "player" then return end
+	if os.clock() < (b.busyUntil or 0) then return end
 	local myPet = b.playerPets[b.playerCurrent]
 	local enemyPet = b.npcPets[b.npcCurrent]
 	if not myPet or not enemyPet then return end
@@ -3062,6 +3838,7 @@ end
 local function processPlayerSuper(player)
 	local b = battles[player.UserId]
 	if not b or not b.active or b.turn ~= "player" then return end
+	if os.clock() < (b.busyUntil or 0) then return end
 	local myPet = b.playerPets[b.playerCurrent]
 	local enemyPet = b.npcPets[b.npcCurrent]
 	if not myPet or not enemyPet then return end
@@ -3074,6 +3851,7 @@ end
 local function processPlayerSwitch(player)
 	local b = battles[player.UserId]
 	if not b or not b.active or b.turn ~= "player" then return end
+	if os.clock() < (b.busyUntil or 0) then return end
 	local nxt = nil
 	for step = 1, #b.playerPets do
 		local idx = ((b.playerCurrent - 1 + step) % #b.playerPets) + 1
@@ -3086,8 +3864,17 @@ local function processPlayerSwitch(player)
 	b.playerCurrent = nxt
 	b.log = "Tu changes pour " .. b.playerPets[nxt].name .. " !"
 	b.turn = "npc"
+	-- l'ancien pet est rappele dans un rayon de lumiere, puis le nouveau tombe dans l'arene
+	b.hold = b.hold or {}
+	killVis(b, "player", "recall")
+	b.hold.player = os.clock() + 0.45
+	b.busyUntil = os.clock() + 1.2
+	b.fx = { kind = "switch", actor = "player" }
 	sendBattleUpdate(player)
-	task.delay(1.2, function() processNPCAttack(player, b) end)
+	task.delay(0.48, function()
+		if not b.closed then updateArenaVisuals(b) end
+	end)
+	task.delay(1.9, function() processNPCAttack(player, b) end)
 end
 
 startBattle = function(player, npcIndex)
@@ -3154,7 +3941,7 @@ startBattle = function(player, npcIndex)
 		npcIndex = npcIndex, playerPets = playerPets, npcPets = npcPets,
 		playerCurrent = 1, npcCurrent = 1, turn = "player", active = true,
 		log = "Le combat commence ! " .. npc.name .. " t'attend !",
-		originalCFrame = hrp.CFrame, arena = arena, vis = {}, lastAction = os.clock()
+		originalCFrame = hrp.CFrame, arena = arena, vis = {}, hold = {}, lastAction = os.clock()
 	}
 	battles[player.UserId] = b
 
@@ -3164,13 +3951,19 @@ startBattle = function(player, npcIndex)
 	tModel.Parent = arena.folder
 	staticAnimators[tModel] = tP.anims
 	b.trainerModel = tModel
+	b.trainerRoot = tRoot
+	b.trainerBase = tRoot.CFrame
 
+	FX.poof(world, hrp.Position, WHITE, 1.4)
 	local pPos = arena.origin + V3(-19, 4, 0)
 	safeTeleport(player, CFrame.lookAt(pPos, pPos + V3(1, 0, 0)))
 	if not player.Parent or battles[player.UserId] ~= b then return end
 
 	updateArenaVisuals(b)
-	BattleStart:FireClient(player, battlePayload(b))
+	FX.battleIntro(b, npc)
+	local payload = battlePayload(b)
+	payload.intro = true   -- le client joue l'introduction (bandeau VS, camera)
+	BattleStart:FireClient(player, payload)
 end
 
 -- ============================================================
@@ -3247,6 +4040,7 @@ RebirthRemote.OnServerEvent:Connect(function(player)
 	s.coins = START_COINS
 	s.defeatedNPCs = {}
 	RebirthRemote:FireClient(player, { success = true, rebirthLevel = s.rebirthLevel })
+	FX.rebirth(player)
 	sendState(player)
 	sendNPCInfo(player)
 end)
@@ -3316,6 +4110,16 @@ BuySpeed.OnServerEvent:Connect(function(player)
 	s.coins = s.coins - SPEED_BOOST_COST
 	s.speedBoostUntil = os.time() + SPEED_BOOST_DURATION
 	applySpeedBoost(player)
+	do
+		local char = player.Character
+		local hrp = char and char:FindFirstChild("HumanoidRootPart")
+		if hrp then
+			local blue = Color3.fromRGB(120, 220, 255)
+			FX.ring(world, hrp.Position - V3(0, 2.7, 0), blue, 2, 16, 0.5)
+			FX.sparks(world, hrp.Position, blue, 26, 20, 0.45, 0.7, { accel = V3(0, 12, 0), fade = WHITE })
+			FX.flash(char, blue, 0.8, 0.4)
+		end
+	end
 	notify(player, "Boost de vitesse x" .. SPEED_BOOST_MULT .. " active pendant " .. SPEED_BOOST_DURATION .. " secondes !", Color3.fromRGB(120, 220, 255))
 	sendState(player)
 	task.delay(SPEED_BOOST_DURATION + 0.1, function()
