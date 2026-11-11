@@ -29,7 +29,7 @@ The goal is to create an engaging Roblox experience with rewarding progression, 
 
 Les images sont dans `affiches/` :
 
-- `affiche-1-pets.png`, `affiche-2-oeuf.png`, `affiche-3-mondes.png`, `affiche-4-secret.png` : miniatures 1920x1080
+- `affiche-1-cristal.png`, `affiche-2-oeuf.png`, `affiche-3-evolution.png`, `affiche-4-mondes.png` : miniatures 1920x1080
 - `icone.png` : icone du jeu 512x512
 
 Pour les regenerer : `node affiches/generer.js <dossier de la police Luckiest Guy>`.
