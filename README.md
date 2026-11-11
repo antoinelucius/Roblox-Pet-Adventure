@@ -1,8 +1,8 @@
-# Roblox Pet Adventure
+# Magic Pets
 
 ## About the Project
 
-Roblox Pet Adventure is a game in development focused on collecting pets, upgrading abilities, exploring new areas, and battling enemies.
+Magic Pets is a game in development focused on collecting pets, upgrading abilities, exploring new areas, and battling enemies.
 
 ## Planned Features
 
@@ -24,3 +24,12 @@ The game is currently under active development. Features and gameplay systems ar
 ## Goals
 
 The goal is to create an engaging Roblox experience with rewarding progression, collectible pets, and regular improvements.
+
+## Affiches Roblox
+
+Les images sont dans `affiches/` :
+
+- `affiche-1-pets.png`, `affiche-2-oeuf.png`, `affiche-3-mondes.png`, `affiche-4-secret.png` : miniatures 1920x1080
+- `icone.png` : icone du jeu 512x512
+
+Pour les regenerer : `node affiches/generer.js <dossier de la police Luckiest Guy>`.

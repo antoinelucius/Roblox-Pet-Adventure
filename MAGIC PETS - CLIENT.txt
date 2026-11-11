@@ -1,4 +1,4 @@
--- MYTHIC WORLDS SIMULATOR - CLIENT
+-- MAGIC PETS - CLIENT
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")

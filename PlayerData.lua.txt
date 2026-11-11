@@ -1,5 +1,5 @@
 -- ============================================================
--- MYTHIC WORLDS SIMULATOR - SERVER (v5 - combat corrige, cristaux aleatoires, portails/mondes, teleportation securisee)
+-- MAGIC PETS - SERVER (v5 - combat corrige, cristaux aleatoires, portails/mondes, teleportation securisee)
 -- A placer dans ServerScriptService (remplace l'ancien script serveur).
 -- Les RemoteEvents existants (StateUpdate, BuyEgg, EquipPet, EggInfo,
 -- BattleStart, BattleAction, BattleUpdate, RebirthRemote, NPCInfo)
@@ -3699,5 +3699,5 @@ createCrystals(3)
 for w = 1, #WORLDS do createEggsForWorld(w) end
 createNPCs()
 
-print("[MWS] Mythic Worlds Simulator v5 initialise : 3 mondes, 31 pets, 6 oeufs, 9 monstres.")
+print("[MWS] Magic Pets v5 initialise : 3 mondes, 31 pets, 6 oeufs, 9 monstres.")
 
