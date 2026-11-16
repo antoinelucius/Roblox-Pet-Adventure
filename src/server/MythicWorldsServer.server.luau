@@ -2828,6 +2828,7 @@ local function usePortal(player, target)
 		end
 		s.coins = s.coins - price
 		s.unlockedWorld = target
+		if target == 2 and _G.MWS_Funnel then _G.MWS_Funnel(player, "world2") end
 		notify(player, "Nouveau monde debloque : " .. WORLDS[target].name .. " !", Color3.fromRGB(255, 220, 80))
 		sendState(player)
 	end
@@ -6229,7 +6230,10 @@ do
 	-- cadeau du jour et quetes de la semaine, ranges dans une seule table : le bloc est a la
 	-- limite de 200 variables locales de Luau
 	local Quests = {
-		DAILY = { 500, 1000, 2000, 3500, 5000, 8000, 15000 },   -- le jour 7 donne aussi une potion de chance
+		DAILY = { 500, 1000, 2000, 3500, 5000, 8000, 15000 },
+		-- jours forts du calendrier : une potion en plus des coins (false = coins seuls)
+		DAILY_BONUS = { false, "speed", false, false, false, false, "luck" },
+		POTION_NAME = { luck = "potion de chance", speed = "potion de vitesse" },
 		-- quetes de la semaine : 2 grandes quetes tirees chaque lundi (meme tirage pour tout le monde),
 		-- chacune donne des coins et 1 potion
 		WEEKLY = {
@@ -6253,15 +6257,31 @@ do
 			s.weekly.week, s.weekly.prog, s.weekly.claimed = w, {}, {}
 		end
 	end
-	function Quests.weeklyList()
-		local rng = Random.new(Quests.week() * 7919 + 13)
+	-- melange 1..n avec une graine : le meme tirage pour tout le monde
+	function Quests.shuffled(n, seed)
+		local rng = Random.new(seed)
 		local idx = {}
-		for i = 1, #Quests.WEEKLY do idx[i] = i end
+		for i = 1, n do idx[i] = i end
 		for i = #idx, 2, -1 do
 			local j = rng:NextInteger(1, i)
 			idx[i], idx[j] = idx[j], idx[i]
 		end
+		return idx
+	end
+	function Quests.weeklyList()
+		local idx = Quests.shuffled(#Quests.WEEKLY, Quests.week() * 7919 + 13)
 		return { Quests.WEEKLY[idx[1]], Quests.WEEKLY[idx[2]] }
+	end
+	-- serie du cadeau du jour si le joueur le prend le jour d, et case (1 a 7) correspondante
+	function Quests.dailyStreak(s, d)
+		local streak = (s.daily.day == d - 1) and (s.daily.streak + 1) or 1
+		return streak, ((streak - 1) % 7) + 1
+	end
+	-- entonnoir d'accueil : module facultatif MWS_Funnel (ServerStorage). Sans lui, rien n'est envoye.
+	Quests.funnel = ServerStorage:FindFirstChild("MWS_Funnel")
+	if Quests.funnel then Quests.funnel = require(Quests.funnel) end
+	_G.MWS_Funnel = function(player, key)
+		if Quests.funnel and not TEST_MODE then Quests.funnel.step(player, key) end
 	end
 
 	local totalPets = 0
@@ -6298,13 +6318,7 @@ do
 	end
 
 	local function todaysQuests(d)
-		local rng = Random.new(d)
-		local idx = {}
-		for i = 1, #QUEST_POOL do idx[i] = i end
-		for i = #idx, 2, -1 do
-			local j = rng:NextInteger(1, i)
-			idx[i], idx[j] = idx[j], idx[i]
-		end
+		local idx = Quests.shuffled(#QUEST_POOL, d)
 		local out = {}
 		for i = 1, 3 do out[i] = QUEST_POOL[idx[i]] end
 		return out
@@ -6397,10 +6411,10 @@ do
 		end
 
 		local claimedToday = s.daily.day == d
-		local streak = claimedToday and s.daily.streak or ((s.daily.day == d - 1) and (s.daily.streak + 1) or 1)
+		local streak = claimedToday and s.daily.streak or Quests.dailyStreak(s, d)
 		local rewards = {}
 		for i = 1, #Quests.DAILY do rewards[i] = math.floor(Quests.DAILY[i] * sc) end
-		local daily = { claimed = claimedToday, streak = streak, index = ((streak - 1) % 7) + 1, rewards = rewards }
+		local daily = { claimed = claimedToday, streak = streak, index = ((streak - 1) % 7) + 1, rewards = rewards, bonus = Quests.DAILY_BONUS }
 
 		local weekly = {}
 		for i, q in ipairs(Quests.weeklyList()) do
@@ -6433,6 +6447,7 @@ do
 			if s.tutProg >= step.need or satisfied(s, step) then
 				s.coins = s.coins + step.reward
 				notify(player, "Objectif termine : +" .. fmt(step.reward) .. " coins !", GOLD)
+				_G.MWS_Funnel(player, step.event)
 				s.tut = s.tut + 1
 				s.tutProg = 0
 				if s.tut > #TUT then
@@ -6546,14 +6561,14 @@ do
 			notify(player, "Recompense du jour deja reclamee, reviens demain !", GOLD)
 			return
 		end
-		local streak = (s.daily.day == d - 1) and (s.daily.streak + 1) or 1
-		local idx = ((streak - 1) % 7) + 1
+		local streak, idx = Quests.dailyStreak(s, d)
 		local reward = math.floor(Quests.DAILY[idx] * scale(s))
 		s.coins = s.coins + reward
 		local extra = ""
-		if idx == 7 then
-			s.potions.luck = (s.potions.luck or 0) + 1
-			extra = " + 1 potion de chance"
+		local potion = Quests.DAILY_BONUS[idx]
+		if potion then
+			s.potions[potion] = (s.potions[potion] or 0) + 1
+			extra = " + 1 " .. Quests.POTION_NAME[potion]
 		end
 		s.daily.day, s.daily.streak = d, streak
 		notify(player, "Jour " .. streak .. " : +" .. fmt(reward) .. " coins" .. extra .. " !", GOLD)
@@ -6664,6 +6679,8 @@ do
 			local s = states[player.UserId]
 			if not s or not player.Parent then return end
 			ensure(s)
+			-- tout nouveau joueur : premiere etape de l'entonnoir d'accueil
+			if s.tut == 1 and s.tutProg == 0 and #s.pets == 0 then _G.MWS_Funnel(player, "arrival") end
 			for _, pet in ipairs(s.pets) do
 				if PETS[pet.name] then s.dex[pet.name] = true end
 			end
