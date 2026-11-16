@@ -14,7 +14,7 @@
     <radialGradient id="glow2"><stop offset="0" stop-color="#ff9628" stop-opacity="0.6"/><stop offset="0.55" stop-color="#ff9628" stop-opacity="0.2"/><stop offset="1" stop-color="#ff9628" stop-opacity="0"/></radialGradient>
     <clipPath id="clip3"><path d="M30 468 C170 432 290 356 320 200 L442 262 C378 408 214 480 30 468Z" /></clipPath>
   </defs>
-
+  <g transform="translate(20.5 20.5) scale(0.92)">
   <circle cx="256" cy="256" r="256" fill="url(#glow1)"/>
   <circle cx="366" cy="150" r="142" fill="url(#glow2)"/>
   <path d="M92 352 C164 326 224 276 250 196 L284 214 C252 298 180 348 92 352Z" fill="url(#tr)"/><path d="M92 352 C164 326 224 276 250 196 L284 214 C252 298 180 348 92 352Z" fill="none" stroke="#1B1630" stroke-width="10" stroke-linejoin="round" stroke-linecap="round"/>
@@ -27,4 +27,5 @@
   <path d="M190 128 Q193.5 146.5 212 150 Q193.5 153.5 190 172 Q186.5 153.5 168 150 Q186.5 146.5 190 128Z" fill="#FFFFFF" stroke="#1B1630" stroke-width="4.4" stroke-linejoin="round"/>
   <path d="M82 191 Q84.4 203.6 97 206 Q84.4 208.4 82 221 Q79.6 208.4 67 206 Q79.6 203.6 82 191Z" fill="#ffd5a9" stroke="#1B1630" stroke-width="4" stroke-linejoin="round"/>
   <path d="M470 284 Q472.6 297.4 486 300 Q472.6 302.6 470 316 Q467.4 302.6 454 300 Q467.4 297.4 470 284Z" fill="#ffd5a9" stroke="#1B1630" stroke-width="4" stroke-linejoin="round"/>
+  </g>
 </svg>

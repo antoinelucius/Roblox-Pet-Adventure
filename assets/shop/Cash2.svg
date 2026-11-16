@@ -20,7 +20,7 @@
     <clipPath id="clip9"><circle cx="256" cy="322" r="82" /></clipPath>
     <clipPath id="clip10"><circle cx="256" cy="322" r="59.9" /></clipPath>
   </defs>
-
+  <g transform="translate(20.5 20.5) scale(0.92)">
   <circle cx="256" cy="256" r="256" fill="url(#glow1)"/>
   <ellipse cx="256" cy="474" rx="190" ry="18" fill="#1B1630" fill-opacity="0.22"/>
   <g>
@@ -61,4 +61,5 @@
   <path d="M440 70 Q445.4 98.6 474 104 Q445.4 109.4 440 138 Q434.6 109.4 406 104 Q434.6 98.6 440 70Z" fill="#FFFFFF" stroke="#1B1630" stroke-width="6.8" stroke-linejoin="round"/>
   <path d="M66 126 Q69.8 146.2 90 150 Q69.8 153.8 66 174 Q62.2 153.8 42 150 Q62.2 146.2 66 126Z" fill="#FFF3B0" stroke="#1B1630" stroke-width="4.8" stroke-linejoin="round"/>
   <path d="M446 246 Q448.6 259.4 462 262 Q448.6 264.6 446 278 Q443.4 264.6 430 262 Q443.4 259.4 446 246Z" fill="#FFFFFF" stroke="#1B1630" stroke-width="4" stroke-linejoin="round"/>
+  </g>
 </svg>

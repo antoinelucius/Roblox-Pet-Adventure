@@ -1,6 +1,7 @@
 # Images de la boutique
 
-Une image par article de la boutique Robux : 512 × 512, fond transparent, objet entier et centré.
+Une image par article de la boutique Robux : 512 × 512, fond transparent, objet entier et centré,
+avec une marge d'au moins 5 % autour du sujet (rien n'est coupé au bord du fichier).
 Aperçu de l'ensemble : `preview.png`.
 
 | Fichier | Ligne de `Config.Images` | Article |

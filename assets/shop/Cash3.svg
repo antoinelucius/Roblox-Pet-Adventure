@@ -28,7 +28,7 @@
     <clipPath id="clip17"><rect x="370" y="268" width="44" height="204" rx="0" /></clipPath>
     <clipPath id="clip18"><rect x="208" y="276" width="96" height="104" rx="24" /></clipPath>
   </defs>
-
+  <g transform="translate(20.5 20.5) scale(0.92)">
   <circle cx="256" cy="256" r="256" fill="url(#glow1)"/>
   <ellipse cx="256" cy="476" rx="210" ry="16" fill="#1B1630" fill-opacity="0.22"/>
   <path d="M64 270 C64 88 448 88 448 270Z" fill="#E08600"/><g clip-path="url(#clip2)"><path d="M64 270 C64 88 448 88 448 270Z" fill="url(#gold)" transform="translate(-6 6)"/></g><path d="M64 270 C64 88 448 88 448 270Z" fill="none" stroke="#1B1630" stroke-width="16" stroke-linejoin="round" stroke-linecap="round"/>
@@ -97,4 +97,5 @@
   <path d="M452 46 Q457.4 74.6 486 80 Q457.4 85.4 452 114 Q446.6 85.4 418 80 Q446.6 74.6 452 46Z" fill="#FFFFFF" stroke="#1B1630" stroke-width="6.8" stroke-linejoin="round"/>
   <path d="M60 82 Q64.2 103.8 86 108 Q64.2 112.2 60 134 Q55.8 112.2 34 108 Q55.8 103.8 60 82Z" fill="#FFF3B0" stroke="#1B1630" stroke-width="5.2" stroke-linejoin="round"/>
   <path d="M256 44 Q258.9 59.1 274 62 Q258.9 64.9 256 80 Q253.1 64.9 238 62 Q253.1 59.1 256 44Z" fill="#FFFFFF" stroke="#1B1630" stroke-width="4" stroke-linejoin="round"/>
+  </g>
 </svg>

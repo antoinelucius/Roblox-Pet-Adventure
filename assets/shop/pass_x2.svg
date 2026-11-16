@@ -17,7 +17,7 @@
     <clipPath id="clip6"><circle cx="426" cy="118" r="26" /></clipPath>
     <clipPath id="clip7"><circle cx="118" cy="352" r="16" /></clipPath>
   </defs>
-
+  <g transform="translate(20.5 20.5) scale(0.92)">
   <circle cx="256" cy="256" r="256" fill="url(#glow1)"/>
   <path d="M84 334 L46 122 L158 214 L236 58 L314 214 L426 122 L388 334Z" fill="url(#gold)"/><g clip-path="url(#clip2)">
     <polygon points="236,58 314,214 388,334 236,334" fill="#E08600" fill-opacity="0.45"/>
@@ -44,4 +44,5 @@
   <path d="M470 36 Q474.2 57.8 496 62 Q474.2 66.2 470 88 Q465.8 66.2 444 62 Q465.8 57.8 470 36Z" fill="#FFFFFF" stroke="#1B1630" stroke-width="5.2" stroke-linejoin="round"/>
   <path d="M60 418 Q64.2 439.8 86 444 Q64.2 448.2 60 470 Q55.8 448.2 34 444 Q55.8 439.8 60 418Z" fill="#FFF3B0" stroke="#1B1630" stroke-width="5.2" stroke-linejoin="round"/>
   <path d="M120 44 Q122.6 57.4 136 60 Q122.6 62.6 120 76 Q117.4 62.6 104 60 Q117.4 57.4 120 44Z" fill="#FFFFFF" stroke="#1B1630" stroke-width="4" stroke-linejoin="round"/>
+  </g>
 </svg>
