@@ -493,7 +493,7 @@ local function notify(player, text, color)
 	Debris:AddItem(gui, 3.4)
 end
 
-local function popText(parent, pos, text, color)
+local function popText(parent, pos, text, color, big)
 	local p = Instance.new("Part")
 	p.Anchored = true
 	p.CanCollide = false
@@ -516,6 +516,13 @@ local function popText(parent, pos, text, color)
 	l.TextSize = 24
 	l.TextStrokeTransparency = 0.3
 	l.Parent = bb
+	if big then
+		-- gros chiffre : il surgit petit puis grossit avec un rebond
+		l.TextScaled = true
+		l.TextStrokeTransparency = 0
+		bb.Size = UDim2.new(0, 60, 0, 15)
+		TweenService:Create(bb, TweenInfo.new(0.22, Enum.EasingStyle.Back, Enum.EasingDirection.Out), { Size = UDim2.new(0, 240, 0, 60) }):Play()
+	end
 	TweenService:Create(p, TweenInfo.new(1, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { Position = pos + V3(0, 4, 0) }):Play()
 	TweenService:Create(l, TweenInfo.new(1, Enum.EasingStyle.Linear), { TextTransparency = 1, TextStrokeTransparency = 1 }):Play()
 	Debris:AddItem(p, 1.2)
@@ -2227,6 +2234,15 @@ RunService.Heartbeat:Connect(function(dt)
 			if lt >= 0 and lt <= 1 then off = off + vis.dir * (math.sin(lt * math.pi) * 7) end
 			if vis.shakeUntil and t < vis.shakeUntil then
 				off = off + V3(math.random() - 0.5, 0, math.random() - 0.5) * 1.2
+			end
+			if vis.hitT then
+				-- recul a l'impact : le pet part en arriere puis revient (0,3 s)
+				local hk = (t - vis.hitT) / 0.3
+				if hk < 1 then
+					off = off - vis.dir * (math.sin(hk * math.pi) * (vis.hitPow or 1.4))
+				else
+					vis.hitT = nil
+				end
 			end
 			local spawnK = math.clamp((t - vis.spawnT) / 0.5, 0, 1)
 			off = off + V3(0, -3 * (1 - spawnK), 0)
@@ -4144,6 +4160,76 @@ end
 local BossFight = {}
 BossFight.GUARD_FACTOR = 0.3
 
+-- bulle de protection autour du pet qui se met en garde (retiree au coup suivant)
+function BossFight.dropGuard(b)
+	local bubble = b.guardBubble
+	b.guardBubble = nil
+	if bubble and bubble.Parent then
+		TweenService:Create(bubble, TweenInfo.new(0.25), { Transparency = 1, Size = bubble.Size * 1.35 }):Play()
+		Debris:AddItem(bubble, 0.3)
+	end
+end
+
+function BossFight.raiseGuard(b)
+	BossFight.dropGuard(b)
+	local vis = b.vis and b.vis.player
+	if not vis or not vis.root or not vis.root.Parent or not b.arena then return end
+	local bubble = fxPart(b.arena.folder, V3(2, 2, 2), Color3.fromRGB(110, 180, 255), Enum.PartType.Ball, CF(vis.root.Position))
+	bubble.Name = "MWS_Guard"
+	bubble.Material = Enum.Material.ForceField
+	TweenService:Create(bubble, TweenInfo.new(0.25, Enum.EasingStyle.Back, Enum.EasingDirection.Out), { Size = V3(9, 9, 9) }):Play()
+	b.guardBubble = bubble
+end
+
+-- Retour visuel d'un coup, joue au moment de l'impact (aucun delai ajoute au combat) :
+-- recul + flash du pet touche, chiffre de degats, effet a part pour un coup critique,
+-- une attaque chargee, une garde reussie ou un coup dans le vide.
+-- o = { crit, heavy, guarded, mine } ; mine = c'est le pet du joueur qui encaisse
+function BossFight.hitFeedback(b, vis, damage, o)
+	o = o or {}
+	if o.guarded then BossFight.dropGuard(b) end
+	if not vis or not vis.root or not vis.root.Parent or not b.arena then return end
+	local folder = b.arena.folder
+	local pos = vis.root.Position
+	local numberColor = o.mine and Color3.fromRGB(255, 90, 90) or Color3.fromRGB(255, 240, 120)
+	if damage <= 0 then
+		popText(folder, pos + V3(0, 4, 0), "RATÉ !", Color3.fromRGB(200, 200, 210))
+		return
+	end
+	vis.hitT = os.clock()
+	vis.hitPow = (o.heavy and 3 or (o.crit and 2.4 or 1.4)) * (o.guarded and 0.4 or 1)
+	-- flash blanc tres court (les boss gardent leur propre contour d'alerte)
+	if not (vis.ref and vis.ref.isBoss) then
+		local flash = Instance.new("Highlight")
+		flash.Name = "MWS_HitFlash"
+		flash.DepthMode = Enum.HighlightDepthMode.Occluded
+		flash.FillColor = o.guarded and Color3.fromRGB(110, 180, 255) or WHITE
+		flash.OutlineColor = flash.FillColor
+		flash.FillTransparency = 0.2
+		flash.Parent = vis.model
+		TweenService:Create(flash, TweenInfo.new(0.22), { FillTransparency = 1, OutlineTransparency = 1 }):Play()
+		Debris:AddItem(flash, 0.3)
+	end
+	popText(folder, pos + V3(0, 4, 0), "-" .. damage, numberColor, o.crit or o.heavy)
+	if o.guarded then
+		popText(folder, pos + V3(0, 6.5, 0), "\u{1F6E1} BLOQUÉ !", Color3.fromRGB(120, 190, 255))
+	elseif o.crit then
+		popText(folder, pos + V3(0, 6.5, 0), "CRITIQUE !", Color3.fromRGB(255, 170, 40))
+		-- etoile d'impact : quelques lames lumineuses qui jaillissent
+		for _ = 1, 6 do
+			local blade = fxPart(folder, V3(0.5, 0.5, 1), Color3.fromRGB(255, 235, 120), nil,
+				CF(pos) * CFrame.Angles(math.random() * 6.28, math.random() * 6.28, 0))
+			fxGrowFade(blade, V3(0.08, 0.08, 9 + math.random() * 5), 0.28)
+		end
+	elseif o.heavy then
+		-- attaque chargee : onde doree au sol
+		local ring = fxPart(folder, V3(0.3, 2, 2), Color3.fromRGB(255, 215, 90), Enum.PartType.Cylinder,
+			CF(pos - V3(0, 1.5, 0)) * CFrame.Angles(0, 0, math.pi / 2))
+		ring.Transparency = 0.3
+		fxGrowFade(ring, V3(0.3, 16, 16), 0.4)
+	end
+end
+
 -- Golem de Lave : son corps chauffe a chaque attaque (les fissures passent de l'orange au blanc),
 -- il leve les bras a 100 %, entre en eruption, puis refroidit 2 tours (croute sombre, vapeur)
 function BossFight.heatVisual(b)
@@ -4507,6 +4593,7 @@ local function sendBattleUpdate(player)
 		playerMaxCharge = myPet and myPet.maxCharge or 100,
 		playerCanSuper = myPet and myPet.charge >= myPet.maxCharge or false,
 		fxId = b.fxId, fxPower = b.fxPower, fxFrom = b.fxFrom, fxTo = b.fxTo,
+		hitFx = b.hitFx,
 		status = BossFight.status(b),
 		mechGauge = BossFight.gauge(b), danger = BossFight.danger(b),
 	})
@@ -4565,6 +4652,7 @@ local function processNPCAttack(player, expected)
 	if enemyPet.stunned then
 		enemyPet.stunned = false
 		b.guard = false
+		BossFight.dropGuard(b)
 		b.log = enemyPet.name .. " est sonné et perd son tour !"
 		b.turn = "player"
 		sendBattleUpdate(player)
@@ -4617,8 +4705,9 @@ local function processNPCAttack(player, expected)
 	if pv then
 		if ev then playAttackFx(b.arena.folder, ev, pv.root.Position, elementOf(enemyPet.fxName or enemyPet.name), power) end
 		task.delay(hit, function()
+			if battles[player.UserId] ~= b then return end
 			pv.shakeUntil = os.clock() + 0.35 + power * 0.12
-			if pv.root.Parent then popText(b.arena.folder, pv.root.Position + V3(0, 4, 0), "-" .. damage, Color3.fromRGB(255, 90, 90)) end
+			BossFight.hitFeedback(b, pv, damage, { crit = crit, heavy = isSuper, guarded = guarded, mine = true })
 		end)
 	end
 	b.fxId = (b.fxId or 0) + 1
@@ -4632,6 +4721,7 @@ local function processNPCAttack(player, expected)
 		if battles[player.UserId] ~= b or not b.active then return end
 		myPet.hp = math.max(0, myPet.hp - damage)
 		if erupting and b.lavaBurst then b.lavaBurst:Emit(90) end
+		b.hitFx = { id = b.fxId, side = "player", damage = damage, crit = crit, heavy = isSuper, guarded = guarded }
 		sendBattleUpdate(player)
 	end)
 	task.delay(hit + 0.3, function()
@@ -4687,7 +4777,7 @@ local function winBattle(player, b)
 end
 
 -- power : 1 attaque normale, 2 critique, 2-4 attaques speciales, 5 super attaque
-local function resolvePlayerStrike(player, b, damage, text, power)
+local function resolvePlayerStrike(player, b, damage, text, power, crit)
 	local myPet = b.playerPets[b.playerCurrent]
 	local enemyPet = b.npcPets[b.npcCurrent]
 	b.log = text
@@ -4700,8 +4790,9 @@ local function resolvePlayerStrike(player, b, damage, text, power)
 		if pv then playAttackFx(b.arena.folder, pv, ev.root.Position, elementOf(myPet.name), power) end
 		local evRoot = ev.root
 		task.delay(hit, function()
+			if battles[player.UserId] ~= b then return end
 			ev.shakeUntil = os.clock() + 0.35 + power * 0.12
-			if evRoot.Parent then popText(b.arena.folder, evRoot.Position + V3(0, 4, 0), "-" .. damage, Color3.fromRGB(255, 240, 120)) end
+			if evRoot.Parent then BossFight.hitFeedback(b, ev, damage, { crit = crit, heavy = (not crit) and power >= 2 }) end
 		end)
 	end
 	b.fxId = (b.fxId or 0) + 1
@@ -4716,6 +4807,7 @@ local function resolvePlayerStrike(player, b, damage, text, power)
 	task.delay(hit, function()
 		if battles[player.UserId] ~= b or not b.active then return end
 		enemyPet.hp = math.max(0, enemyPet.hp - damage)
+		b.hitFx = { id = b.fxId, side = "npc", damage = damage, crit = crit == true, heavy = (not crit) and power >= 2 }
 		sendBattleUpdate(player)
 	end)
 	task.delay(hit + 0.3, function()
@@ -4759,7 +4851,7 @@ local function processPlayerAttack(player)
 	if crit then damage = math.floor(damage * 1.5) end
 	local note
 	damage, note = BossFight.strike(enemyPet, damage, false)
-	resolvePlayerStrike(player, b, damage, myPet.name .. " inflige " .. damage .. " degats !" .. (crit and " Coup critique !" or "") .. note, crit and 2 or 1)
+	resolvePlayerStrike(player, b, damage, myPet.name .. " inflige " .. damage .. " degats !" .. (crit and " Coup critique !" or "") .. note, crit and 2 or 1, crit)
 end
 
 local SPECIAL_ATTACKS = {
@@ -4832,6 +4924,7 @@ function BossFight.guard(player)
 	local myPet = b.playerPets[b.playerCurrent]
 	if not myPet then return end
 	b.guard = true
+	BossFight.raiseGuard(b)
 	myPet.charge = math.min(myPet.maxCharge, myPet.charge + 15)
 	b.log = myPet.name .. " se met en garde !"
 	b.turn = "npc"
