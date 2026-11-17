@@ -6782,7 +6782,8 @@ do
 		end)
 	end
 	Players.PlayerAdded:Connect(onMetaPlayer)
-	for _, p in ipairs(Players:GetPlayers()) do onMetaPlayer(p) end
+	-- dans une fonction a part : ce bloc est a la limite de 200 variables locales de Luau
+	task.spawn(function() for _, p in ipairs(Players:GetPlayers()) do onMetaPlayer(p) end end)
 
 	-- la fleche du tutoriel suit la cible la plus proche
 	task.spawn(function()
