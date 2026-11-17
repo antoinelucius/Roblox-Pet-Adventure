@@ -116,3 +116,29 @@ Les miniatures ont été prises aux mêmes endroits : ce sont de bons points de 
 Quand le jeu est publié et que les miniatures sont testées : campagne **Plays**, tous les
 joueurs, sur environ 10 jours, petit budget pour commencer. Les chiffres donnés dans les vidéos
 sont des exemples, pas des promesses. C'est ta décision.
+
+---
+
+## 8. Done on 17/11/2026
+
+- Name chosen: **Hatch Mythic Pets**. The name and the description (English + a French line) were put on the
+  page from Studio. Icon: `miniatures/icone_hatch_mythic_pets.png`.
+- Game published, still **private**.
+- Your old description, kept in case you want it back:
+
+> Tu arrives dans la prairie avec 100 coins en poche. Le but : repartir avec un Dragon primordial. Bon courage.
+>
+> Ramasse des cristaux, achète des œufs et monte ton équipe de 6 pets. Ils te suivent partout et ramassent les cristaux tout seuls pendant que tu fais autre chose.
+>
+> Dans le jeu :
+> - 31 pets à collectionner, du Commun au Divin
+> - 6 œufs, du basique à l'Œuf primordial (il coûte cher, oui)
+> - 3 mondes : Prairie enchantée, Royaume volcanique, Dimension mythique
+> - 9 dresseurs à battre, du Gobelin Sauvage au Titan Primordial
+> - 3 attaques spéciales à charger en combat
+> - Des cristaux dorés et royaux qui rapportent beaucoup plus, ouvre l'œil
+> - La renaissance pour débloquer les mondes suivants
+>
+> Le jeu est encore en développement et j'ajoute des trucs régulièrement. Si tu trouves un bug ou que t'as une idée, dis-le moi !
+>
+> Un like si tu t'amuses, ça aide vraiment.
