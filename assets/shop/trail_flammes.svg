@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" fill="none">
+  <defs>
+    <linearGradient id="gold" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#FFF08A"/><stop offset="0.55" stop-color="#FFC928"/><stop offset="1" stop-color="#F59A00"/></linearGradient>
+    <linearGradient id="goldIn" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#FFDC55"/><stop offset="1" stop-color="#FFB01F"/></linearGradient>
+    <linearGradient id="sack" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#F2CC8C"/><stop offset="1" stop-color="#C98C42"/></linearGradient>
+    <linearGradient id="wood" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#D9924A"/><stop offset="1" stop-color="#A45C22"/></linearGradient>
+    <linearGradient id="liqLuck" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#FFC44D"/><stop offset="1" stop-color="#F05A0E"/></linearGradient>
+    <linearGradient id="liqSpeed" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#74D8FF"/><stop offset="1" stop-color="#1B5FE0"/></linearGradient>
+    <linearGradient id="flame" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#FFB02E"/><stop offset="1" stop-color="#EE3A16"/></linearGradient>
+    <linearGradient id="petal" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#FFE3EF"/><stop offset="1" stop-color="#FF8FC0"/></linearGradient>
+    <linearGradient id="badge" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#FF78B8"/><stop offset="1" stop-color="#E0206F"/></linearGradient>
+    <linearGradient id="tr" x1="40" y1="460" x2="390" y2="220" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#e63214"/><stop offset="1" stop-color="#ffc83c"/></linearGradient>
+    <radialGradient id="glow1"><stop offset="0" stop-color="#f58c2c" stop-opacity="0.45"/><stop offset="0.55" stop-color="#f58c2c" stop-opacity="0.2"/><stop offset="1" stop-color="#f58c2c" stop-opacity="0"/></radialGradient>
+    <radialGradient id="glow2"><stop offset="0" stop-color="#ffc83c" stop-opacity="0.6"/><stop offset="0.55" stop-color="#ffc83c" stop-opacity="0.2"/><stop offset="1" stop-color="#ffc83c" stop-opacity="0"/></radialGradient>
+    <clipPath id="clip3"><path d="M30 468 C170 432 290 356 320 200 L442 262 C378 408 214 480 30 468Z" /></clipPath>
+  </defs>
+  <g transform="translate(20.5 20.5) scale(0.92)">
+  <circle cx="256" cy="256" r="256" fill="url(#glow1)"/>
+  <circle cx="366" cy="150" r="142" fill="url(#glow2)"/>
+  <path d="M92 352 C164 326 224 276 250 196 L284 214 C252 298 180 348 92 352Z" fill="url(#tr)"/><path d="M92 352 C164 326 224 276 250 196 L284 214 C252 298 180 348 92 352Z" fill="none" stroke="#1B1630" stroke-width="10" stroke-linejoin="round" stroke-linecap="round"/>
+  <path d="M262 488 C338 470 410 430 458 350 L480 374 C432 446 352 490 262 488Z" fill="url(#tr)"/><path d="M262 488 C338 470 410 430 458 350 L480 374 C432 446 352 490 262 488Z" fill="none" stroke="#1B1630" stroke-width="10" stroke-linejoin="round" stroke-linecap="round"/>
+  <path d="M30 468 C170 432 290 356 320 200 L442 262 C378 408 214 480 30 468Z" fill="#9d2418"/><g clip-path="url(#clip3)"><path d="M30 468 C170 432 290 356 320 200 L442 262 C378 408 214 480 30 468Z" fill="url(#tr)" transform="translate(-10 -12)"/><path d="M104 440 C210 410 304 346 350 246" stroke="#ffe9b1" stroke-opacity="0.9" stroke-width="18" stroke-linecap="round" stroke-linejoin="round"/><path d="M190 446 C262 424 330 384 376 306" stroke="#ffe9b1" stroke-opacity="0.6" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"/></g><path d="M30 468 C170 432 290 356 320 200 L442 262 C378 408 214 480 30 468Z" fill="none" stroke="#1B1630" stroke-width="16" stroke-linejoin="round" stroke-linecap="round"/>
+  <g transform="translate(366 150)"><path d="M0 -112 C44 -58 86 -22 86 34 C86 86 46 116 0 116 C-46 116 -86 86 -86 34 C-86 2 -66 -18 -54 -52 C-32 -30 -20 -46 0 -112Z" fill="url(#flame)" stroke="#1B1630" stroke-width="14" stroke-linejoin="round" stroke-linecap="round"/><path d="M0 -40 C30 -4 56 18 56 50 C56 84 30 102 0 102 C-30 102 -56 84 -56 50 C-56 28 -38 16 -30 -6 C-18 8 -10 0 0 -40Z" fill="#FFC83A"/><path d="M0 14 C16 34 30 44 30 64 C30 84 16 96 0 96 C-16 96 -30 84 -30 64 C-30 50 -18 44 0 14Z" fill="#FFF6B8"/><path d="M-52 20 C-52 -2 -40 -18 -34 -30" stroke="#FFE08A" stroke-opacity="0.8" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"/></g>
+  <g transform="translate(140 268) rotate(-18) scale(0.26)"><path d="M0 -112 C44 -58 86 -22 86 34 C86 86 46 116 0 116 C-46 116 -86 86 -86 34 C-86 2 -66 -18 -54 -52 C-32 -30 -20 -46 0 -112Z" fill="url(#flame)" stroke="#1B1630" stroke-width="14" stroke-linejoin="round" stroke-linecap="round"/><path d="M0 14 C16 34 30 44 30 64 C30 84 16 96 0 96 C-16 96 -30 84 -30 64 C-30 50 -18 44 0 14Z" fill="#FFF6B8"/></g>
+  <g transform="translate(438 452) rotate(14) scale(0.2)"><path d="M0 -112 C44 -58 86 -22 86 34 C86 86 46 116 0 116 C-46 116 -86 86 -86 34 C-86 2 -66 -18 -54 -52 C-32 -30 -20 -46 0 -112Z" fill="url(#flame)" stroke="#1B1630" stroke-width="14" stroke-linejoin="round" stroke-linecap="round"/><path d="M0 14 C16 34 30 44 30 64 C30 84 16 96 0 96 C-16 96 -30 84 -30 64 C-30 50 -18 44 0 14Z" fill="#FFF6B8"/></g>
+  <g transform="translate(66 388) rotate(20) scale(0.16)"><path d="M0 -112 C44 -58 86 -22 86 34 C86 86 46 116 0 116 C-46 116 -86 86 -86 34 C-86 2 -66 -18 -54 -52 C-32 -30 -20 -46 0 -112Z" fill="url(#flame)" stroke="#1B1630" stroke-width="14" stroke-linejoin="round" stroke-linecap="round"/><path d="M0 14 C16 34 30 44 30 64 C30 84 16 96 0 96 C-16 96 -30 84 -30 64 C-30 50 -18 44 0 14Z" fill="#FFF6B8"/></g>
+  <path d="M190 128 Q193.5 146.5 212 150 Q193.5 153.5 190 172 Q186.5 153.5 168 150 Q186.5 146.5 190 128Z" fill="#FFFFFF" stroke="#1B1630" stroke-width="4.4" stroke-linejoin="round"/>
+  <path d="M82 191 Q84.4 203.6 97 206 Q84.4 208.4 82 221 Q79.6 208.4 67 206 Q79.6 203.6 82 191Z" fill="#ffe9b1" stroke="#1B1630" stroke-width="4" stroke-linejoin="round"/>
+  <path d="M470 284 Q472.6 297.4 486 300 Q472.6 302.6 470 316 Q467.4 302.6 454 300 Q467.4 297.4 470 284Z" fill="#ffe9b1" stroke="#1B1630" stroke-width="4" stroke-linejoin="round"/>
+  </g>
+</svg>
