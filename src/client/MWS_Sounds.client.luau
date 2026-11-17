@@ -231,9 +231,14 @@ end)
 
 -- gains ponctuels (cristaux, recompenses) ; pas le revenu de chaque seconde
 local lastCoins, lastCoinSound = nil, 0
+local lastRebirth, lastWorld = nil, nil
 remotes:WaitForChild("StateUpdate").OnClientEvent:Connect(function(state, income)
 	local coins = type(state) == "table" and state.coins
 	if type(coins) ~= "number" then return end
+	-- grandes etapes : renaissance faite ou nouveau monde debloque -> fanfare
+	local rebirth, world = tonumber(state.rebirthLevel) or 0, tonumber(state.unlockedWorld) or 1
+	if (lastRebirth and rebirth > lastRebirth) or (lastWorld and world > lastWorld) then play("win") end
+	lastRebirth, lastWorld = rebirth, world
 	if lastCoins and coins - lastCoins > (tonumber(income) or 0) * 2 + 1 and os.clock() - lastCoinSound > 0.25 then
 		lastCoinSound = os.clock()
 		play("coin")
