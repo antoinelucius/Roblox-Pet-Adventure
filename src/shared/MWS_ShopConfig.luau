@@ -107,16 +107,16 @@ Config.Items = {
 -- A gauche : le "model" de l'article, sinon sa "key".
 -- Tant qu'une ligne reste "", l'article garde son objet 3D en briques.
 Config.Images = {
-	Cash1         = "", -- Cash1.png         : Pack de pieces S
-	Cash2         = "", -- Cash2.png         : Pack de pieces M
-	Cash3         = "", -- Cash3.png         : Pack de pieces L
-	PotionLuck    = "", -- PotionLuck.png    : potions de chance (x1, x3, x10 et inventaire)
-	PotionSpeed   = "", -- PotionSpeed.png   : potions de vitesse (x1, x3, x10 et inventaire)
-	trail_flammes = "", -- trail_flammes.png : Trainee de flammes
-	trail_sakura  = "", -- trail_sakura.png  : Trainee de cerisier
-	trail_cosmos  = "", -- trail_cosmos.png  : Trainee cosmique
-	trail_magma   = "", -- trail_magma.png   : Trainee de magma
-	pass_x2       = "", -- pass_x2.png       : Gains x2
+	Cash1         = "rbxassetid://95444163790090", -- Cash1.png         : Pack de pieces S
+	Cash2         = "rbxassetid://86789370696225", -- Cash2.png         : Pack de pieces M
+	Cash3         = "rbxassetid://114542501201094", -- Cash3.png         : Pack de pieces L
+	PotionLuck    = "rbxassetid://77059666850319", -- PotionLuck.png    : potions de chance (x1, x3, x10 et inventaire)
+	PotionSpeed   = "rbxassetid://126763097648533", -- PotionSpeed.png   : potions de vitesse (x1, x3, x10 et inventaire)
+	trail_flammes = "rbxassetid://124903044178729", -- trail_flammes.png : Trainee de flammes
+	trail_sakura  = "rbxassetid://82412250522099", -- trail_sakura.png  : Trainee de cerisier
+	trail_cosmos  = "rbxassetid://101068724331572", -- trail_cosmos.png  : Trainee cosmique
+	trail_magma   = "rbxassetid://128191716712376", -- trail_magma.png   : Trainee de magma
+	pass_x2       = "rbxassetid://100746095036372", -- pass_x2.png       : Gains x2
 }
 
 -- Potions gardees dans l'inventaire du joueur : il choisit quand les utiliser
