@@ -119,12 +119,12 @@ sont des exemples, pas des promesses. C'est ta décision.
 
 ---
 
-## 8. Done on 17/11/2026
+## 8. Fait le 17/11/2026
 
-- Name chosen: **Hatch Mythic Pets**. The name and the description (English + a French line) were put on the
-  page from Studio. Icon: `miniatures/icone_hatch_mythic_pets.png`.
-- Game published, still **private**.
-- Your old description, kept in case you want it back:
+- Nom choisi : **Hatch Mythic Pets**. Le nom et la description (anglais + une ligne en français) sont
+  mis sur la page depuis Studio. Icône : `miniatures/icone_hatch_mythic_pets.png`.
+- Jeu publié, toujours **privé**.
+- Ton ancienne description, gardée au cas où tu voudrais la remettre :
 
 > Tu arrives dans la prairie avec 100 coins en poche. Le but : repartir avec un Dragon primordial. Bon courage.
 >
