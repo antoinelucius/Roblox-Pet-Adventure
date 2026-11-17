@@ -11,7 +11,8 @@ local Lighting = game:GetService("Lighting")
 
 local STUDS = "rbxassetid://6927295847"
 local WHITE, BLACK = Color3.new(1, 1, 1), Color3.new(0, 0, 0)
-local MENU = { "Pets", "Oeufs", "Combat", "Shop", "Mondes", "Quetes", "Renaissance" }
+local MENU = { "Pets", "Oeufs", "Combat", "Shop", "Mondes", "Quetes", "Renaissance",
+	"Eggs", "Battle", "Worlds", "Quests", "Rebirth" }   -- noms anglais : jeu traduit par MWS_Lang
 local SOUNDS = { open = 80984744279155, close = 138409154614452, press = 106984966606682 }
 
 local player = Players.LocalPlayer
@@ -245,6 +246,14 @@ local LEGO_COLORS = {
 	{ "Classement", Color3.fromRGB(190, 140, 40) },
 	{ "Renaissance", Color3.fromRGB(150, 60, 220) },
 	{ "Quêtes", Color3.fromRGB(40, 140, 235) },
+	-- memes menus quand le jeu est en anglais (MWS_Lang)
+	{ "Eggs", Color3.fromRGB(180, 120, 255) },
+	{ "Battles", Color3.fromRGB(200, 60, 60) },
+	{ "Shop", Color3.fromRGB(0, 150, 90) },
+	{ "Worlds", Color3.fromRGB(50, 130, 200) },
+	{ "Leaderboard", Color3.fromRGB(190, 140, 40) },
+	{ "Rebirth", Color3.fromRGB(150, 60, 220) },
+	{ "Quests", Color3.fromRGB(40, 140, 235) },
 }
 
 local function legoAccent(frame)

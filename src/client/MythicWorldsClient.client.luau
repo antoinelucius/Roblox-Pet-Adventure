@@ -3919,12 +3919,12 @@ do
     local function uiTarget(kind)
         if kind == "pets" then
             if panel.Visible then
-                return findButton(panel, function(b) return b.Text == "Equiper" end) or bestPetsBtn
+                return findButton(panel, function(b) return b.Text == "Equiper" or b.Text == "Equip" end) or bestPetsBtn
             end
             return invButton
         elseif kind == "combat" then
             if combatPanel.Visible then
-                return findButton(combatPanel, function(b) return b.Text:find("Combattre") ~= nil end) or combatButton
+                return findButton(combatPanel, function(b) return (b.Text:find("Combattre") or b.Text:find("Fight")) ~= nil end) or combatButton
             end
             return combatButton
         end

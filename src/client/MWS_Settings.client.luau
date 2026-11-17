@@ -7,6 +7,7 @@ local UserInputService = game:GetService("UserInputService")
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
 local saveSetting = ReplicatedStorage:WaitForChild("MWS_Remotes"):WaitForChild("SaveSetting")
+local Lang = require(ReplicatedStorage:WaitForChild("MWS_Lang"))
 
 local SETTINGS = {
 	{ key = "music", attribute = "MWS_SetMusic", label = "Musique", hint = "Musique de fond !", volume = true },
@@ -16,6 +17,8 @@ local SETTINGS = {
 	{ key = "eggs", attribute = "MWS_SetEggs", label = "Voir mes œufs" },
 	{ key = "names", attribute = "MWS_SetNames", label = "Noms sur la carte" },
 	{ key = "shake", attribute = "MWS_SetShake", label = "Secousses de l'écran" },
+	-- sans choix du joueur : anglais, sauf si Roblox est en francais (MWS_Lang)
+	{ key = "english", attribute = "MWS_SetEnglish", label = "Jeu en anglais (English)", language = true },
 }
 local byKey = {}
 for _, setting in ipairs(SETTINGS) do byKey[setting.key] = setting end
@@ -59,6 +62,7 @@ end
 
 local function valueOf(setting)
 	local value = player:GetAttribute(setting.attribute)
+	if value == nil and setting.language then return Lang.wantsEnglish(player) end
 	if value == nil then
 		if setting.volume then return 100 end
 		return true

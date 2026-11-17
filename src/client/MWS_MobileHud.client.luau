@@ -7,6 +7,7 @@ local SMALL_SCREEN = 500   -- plus petit cote de l'ecran en dessous duquel on co
 local BUTTON, GAP = 38, 4
 local LEFT, TOP = 4, 58    -- TOP : juste sous les boutons de Roblox
 local MENU = { "Pets", "Oeufs", "Combat", "Shop", "Mondes", "Quetes", "Renaissance" }
+local MENU_EN = { "Pets", "Eggs", "Battle", "Shop", "Worlds", "Quests", "Rebirth" }   -- jeu en anglais (MWS_Lang)
 
 local camera = workspace.CurrentCamera
 while camera.ViewportSize.X <= 1 do task.wait() end
@@ -43,7 +44,7 @@ local buttons = {}
 for _, child in ipairs(gui:GetChildren()) do
 	if child:IsA("TextButton") and child.Visible then
 		for index, name in ipairs(MENU) do
-			if child.Text:find(name, 1, true) then buttons[index] = child end
+			if child.Text:find(name, 1, true) or child.Text:find(MENU_EN[index], 1, true) then buttons[index] = child end
 		end
 	end
 end
@@ -83,7 +84,7 @@ for _, child in ipairs(gui:GetChildren()) do
 			incomeLimit.MaxTextSize = 11
 			incomeLimit.Parent = income
 		end
-	elseif child:IsA("TextLabel") and child.Text:find("Renaissance", 1, true) then
+	elseif child:IsA("TextLabel") and (child.Text:find("Renaissance", 1, true) or child.Text:find("Rebirth", 1, true)) then
 		child.AnchorPoint = Vector2.new(0.5, 0)
 		child.Position = UDim2.new(0.5, 130, 0, 15)
 		child.Size = UDim2.fromOffset(100, 22)

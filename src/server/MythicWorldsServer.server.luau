@@ -1662,7 +1662,7 @@ local function loadPlayer(player)
 	if datastoreAvailable then
 		data, session, version = Saves.claim(player)
 		if not data then
-			if player.Parent then player:Kick("Impossible de charger ta sauvegarde. Reconnecte-toi dans un instant !") end
+			if player.Parent then player:Kick(player.LocaleId:lower():find("^fr") and "Impossible de charger ta sauvegarde. Reconnecte-toi dans un instant !" or "Could not load your save. Please rejoin in a moment!") end
 			return
 		end
 		if not player.Parent then
@@ -1829,7 +1829,7 @@ local function savePlayer(player, final)
 	if lost then
 		meta.lost = true
 		warn("[MWS] Sauvegarde refusee pour " .. uid .. " : session perimee")
-		if player.Parent then player:Kick("Ta partie a ete ouverte ailleurs. Reconnecte-toi dans un instant !") end
+		if player.Parent then player:Kick(player.LocaleId:lower():find("^fr") and "Ta partie a ete ouverte ailleurs. Reconnecte-toi dans un instant !" or "Your game was opened somewhere else. Please rejoin in a moment!") end
 		return false
 	end
 	if not (ok and written) then
@@ -5747,6 +5747,7 @@ do
 		eggs = { attribute = "MWS_SetEggs" },
 		names = { attribute = "MWS_SetNames" },
 		shake = { attribute = "MWS_SetShake" },
+		english = { attribute = "MWS_SetEnglish" },   -- langue du jeu (MWS_Lang)
 	}
 	local function isValid(rule, value)
 		if rule.volume then
