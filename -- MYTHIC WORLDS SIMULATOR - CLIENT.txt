@@ -1,0 +1,1670 @@
+-- MYTHIC WORLDS SIMULATOR - CLIENT
+
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local TweenService = game:GetService("TweenService")
+local player = Players.LocalPlayer
+
+local remotes = ReplicatedStorage:WaitForChild("MWS_Remotes")
+local StateUpdate = remotes:WaitForChild("StateUpdate")
+local BuyEgg = remotes:WaitForChild("BuyEgg")
+local EquipPet = remotes:WaitForChild("EquipPet")
+local EggInfo = remotes:WaitForChild("EggInfo")
+local BattleStart = remotes:WaitForChild("BattleStart")
+local BattleAction = remotes:WaitForChild("BattleAction")
+local BattleUpdate = remotes:WaitForChild("BattleUpdate")
+local RebirthRemote = remotes:WaitForChild("RebirthRemote")
+local NPCInfo = remotes:WaitForChild("NPCInfo")
+local BattleRequest = remotes:WaitForChild("BattleRequest")
+local WorldInfoRemote = remotes:WaitForChild("WorldInfo")
+local WorldTeleport = remotes:WaitForChild("WorldTeleport")
+local BuySpeed = remotes:WaitForChild("BuySpeed")
+local EquipBest = remotes:WaitForChild("EquipBest")
+
+local state = { coins = 0, pets = {}, equipped = {}, defeatedNPCs = {}, rebirthLevel = 0 }
+local incomePerSec = 0
+local eggData = {}
+local npcData = {}
+local totalNPCs = 0
+-- Images des animaux : ajoute ici les identifiants des images Roblox
+-- Images des animaux
+local PET_IMAGE_IDS = {
+	-- >>> OU METTRE TES IMAGES <<<
+	-- Colle l'identifiant de chaque image entre les guillemets, par exemple : "rbxassetid://123456789"
+	-- Le nom a gauche doit etre EXACTEMENT celui de l'animal. Laisse "" pour afficher une pastille de couleur.
+
+	-- Oeuf de base
+	["Slime des pres"]      = "",
+	["Crapaud veneneux"]    = "",
+	["Renard solaire"]      = "",
+	["Dragon des brumes"]   = "",
+	["Golem de mousse"]     = "",
+	["Dragon violet"]       = "",
+	-- Oeuf dore
+	["Serpent d'argent"]    = "",
+	["Phenix astral"]       = "",
+	["Chimere eclatante"]   = "",
+	["Sphinx de jade"]      = "",
+	["Wyrm de lave"]        = "",
+	-- Oeuf mythique
+	["Loup celeste"]        = "",
+	["Griffon royal"]       = "",
+	["Hydre ether"]         = "",
+	["Dragon cosmique"]     = "",
+	["Titan d'orage"]       = "",
+	-- Oeuf de lave
+	["Crapaud de magma"]    = "",
+	["Renard infernal"]     = "",
+	["Golem de basalte"]    = "",
+	["Phenix de magma"]     = "",
+	["Dragon de lave"]      = "",
+	-- Oeuf celeste
+	["Serpent des etoiles"] = "",
+	["Loup lunaire"]        = "",
+	["Griffon d'aurore"]    = "",
+	["Sphinx cosmique"]     = "",
+	["Hydre du vide"]       = "",
+	-- Oeuf primordial
+	["Chimere du chaos"]    = "rbxassetid://93477136423125",
+	["Dragon d'obsidienne"] = "",
+	["Titan de cristal"]    = "",
+	["Phenix du neant"]     = "",
+	["Dragon primordial"]   = "",
+
+	-- Ajoute les autres animaux ici
+	-- ["Nom exact de l'animal"] = "rbxassetid://123456789",
+}
+-- ============================================================
+-- HELPERS
+-- ============================================================
+
+-- Renvoie l'image d'un animal (ou nil si aucun identifiant n'est renseigne)
+local function getPetImage(name)
+    local id = PET_IMAGE_IDS[name]
+    if type(id) == "string" and id ~= "" then return id end
+    return nil
+end
+
+local RARITY_COLORS = {
+    Secret = Color3.fromRGB(255, 60, 200),
+    Commun = Color3.fromRGB(180, 180, 180),
+    Rare = Color3.fromRGB(80, 150, 255),
+    Epique = Color3.fromRGB(170, 80, 255),
+    Legendaire = Color3.fromRGB(255, 200, 50),
+    Mythique = Color3.fromRGB(255, 80, 80),
+    Divin = Color3.fromRGB(255, 50, 200)
+}
+
+local function colorFromData(c)
+    if typeof(c) == "Color3" then return c end
+    if typeof(c) == "table" then return Color3.fromRGB(c[1] or 255, c[2] or 255, c[3] or 255) end
+    return Color3.fromRGB(150, 150, 150)
+end
+
+local function makeCorner(parent, radius)
+    local c = Instance.new("UICorner")
+    c.CornerRadius = UDim.new(0, radius or 8)
+    c.Parent = parent
+    return c
+end
+
+-- ============================================================
+-- GUI
+-- ============================================================
+
+local gui = Instance.new("ScreenGui")
+gui.Name = "MWS_Gui"
+gui.ResetOnSpawn = false
+gui.IgnoreGuiInset = true
+gui.Parent = player:WaitForChild("PlayerGui")
+
+-- Barre coins + revenu
+local topBar = Instance.new("Frame")
+topBar.Size = UDim2.new(0, 260, 0, 55)
+topBar.Position = UDim2.new(0, 15, 0, 15)
+topBar.BackgroundColor3 = Color3.fromRGB(30, 30, 40)
+topBar.BackgroundTransparency = 0.15
+makeCorner(topBar, 12)
+topBar.Parent = gui
+
+local coinIcon = Instance.new("TextLabel")
+coinIcon.Size = UDim2.new(0, 40, 0, 40)
+coinIcon.Position = UDim2.new(0, 5, 0, 8)
+coinIcon.BackgroundTransparency = 1
+coinIcon.Text = "\u{1F4B0}"
+coinIcon.TextColor3 = Color3.fromRGB(255, 200, 50)
+coinIcon.TextScaled = true
+coinIcon.Font = Enum.Font.GothamBold
+coinIcon.Parent = topBar
+
+local coinLabel = Instance.new("TextLabel")
+coinLabel.Size = UDim2.new(1, -55, 0, 28)
+coinLabel.Position = UDim2.new(0, 50, 0, 3)
+coinLabel.BackgroundTransparency = 1
+coinLabel.Text = "0 Coins"
+coinLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+coinLabel.TextXAlignment = Enum.TextXAlignment.Left
+coinLabel.Font = Enum.Font.GothamBold
+coinLabel.TextSize = 18
+coinLabel.Parent = topBar
+
+local incomeLabel = Instance.new("TextLabel")
+incomeLabel.Size = UDim2.new(1, -55, 0, 20)
+incomeLabel.Position = UDim2.new(0, 50, 0, 31)
+incomeLabel.BackgroundTransparency = 1
+incomeLabel.Text = "+0 /sec"
+incomeLabel.TextColor3 = Color3.fromRGB(100, 255, 100)
+incomeLabel.TextXAlignment = Enum.TextXAlignment.Left
+incomeLabel.Font = Enum.Font.GothamBold
+incomeLabel.TextSize = 14
+incomeLabel.Parent = topBar
+
+-- Rebirth label
+local rebirthLabel = Instance.new("TextLabel")
+rebirthLabel.Size = UDim2.new(0, 130, 0, 25)
+rebirthLabel.Position = UDim2.new(0, 280, 0, 20)
+rebirthLabel.BackgroundColor3 = Color3.fromRGB(80, 40, 120)
+rebirthLabel.BackgroundTransparency = 0.2
+rebirthLabel.Text = "Renaissance: 0"
+rebirthLabel.TextColor3 = Color3.fromRGB(255, 200, 255)
+rebirthLabel.Font = Enum.Font.GothamBold
+rebirthLabel.TextSize = 14
+makeCorner(rebirthLabel, 8)
+rebirthLabel.Parent = gui
+
+-- Bouton Pets
+local invButton = Instance.new("TextButton")
+invButton.Size = UDim2.new(0, 120, 0, 45)
+invButton.Position = UDim2.new(0, 15, 0, 80)
+invButton.BackgroundColor3 = Color3.fromRGB(60, 50, 100)
+invButton.Text = "\xF0\x9F\x90\xBE Pets"
+invButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+invButton.Font = Enum.Font.GothamBold
+invButton.TextSize = 18
+makeCorner(invButton, 10)
+invButton.Parent = gui
+
+-- Bouton Oeufs
+local eggButton = Instance.new("TextButton")
+eggButton.Size = UDim2.new(0, 120, 0, 45)
+eggButton.Position = UDim2.new(0, 15, 0, 135)
+eggButton.BackgroundColor3 = Color3.fromRGB(180, 120, 255)
+eggButton.Text = "\xF0\x9F\xA5\x9A Oeufs"
+eggButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+eggButton.Font = Enum.Font.GothamBold
+eggButton.TextSize = 18
+makeCorner(eggButton, 10)
+eggButton.Parent = gui
+
+-- Bouton Combat
+local combatButton = Instance.new("TextButton")
+combatButton.Size = UDim2.new(0, 120, 0, 45)
+combatButton.Position = UDim2.new(0, 15, 0, 190)
+combatButton.BackgroundColor3 = Color3.fromRGB(200, 60, 60)
+combatButton.Text = "\xE2\x9A\x94 Combat"
+combatButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+combatButton.Font = Enum.Font.GothamBold
+combatButton.TextSize = 18
+makeCorner(combatButton, 10)
+combatButton.Parent = gui
+
+-- Bouton Renaissance
+local rebirthButton = Instance.new("TextButton")
+rebirthButton.Size = UDim2.new(0, 120, 0, 45)
+rebirthButton.Position = UDim2.new(0, 15, 0, 245)
+rebirthButton.BackgroundColor3 = Color3.fromRGB(120, 40, 160)
+rebirthButton.Text = "\xF0\x9F\x94\x84 Renaissance"
+rebirthButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+rebirthButton.Font = Enum.Font.GothamBold
+rebirthButton.TextSize = 16
+makeCorner(rebirthButton, 10)
+rebirthButton.Visible = false
+rebirthButton.Parent = gui
+
+-- ============================================================
+-- PET PANEL
+-- ============================================================
+
+local panel = Instance.new("Frame")
+panel.Size = UDim2.new(0, 420, 0, 380)
+panel.Position = UDim2.new(0.5, -210, 0.5, -190)
+panel.BackgroundColor3 = Color3.fromRGB(25, 25, 35)
+panel.Visible = false
+makeCorner(panel, 15)
+panel.Parent = gui
+
+local panelTitle = Instance.new("TextLabel")
+panelTitle.Size = UDim2.new(1, 0, 0, 40)
+panelTitle.BackgroundTransparency = 1
+panelTitle.Text = "Mes Pets"
+panelTitle.TextColor3 = Color3.fromRGB(255, 255, 255)
+panelTitle.Font = Enum.Font.GothamBold
+panelTitle.TextSize = 22
+panelTitle.Parent = panel
+
+local closeButton = Instance.new("TextButton")
+closeButton.Size = UDim2.new(0, 35, 0, 35)
+closeButton.Position = UDim2.new(1, -40, 0, 5)
+closeButton.BackgroundColor3 = Color3.fromRGB(200, 60, 60)
+closeButton.Text = "X"
+closeButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+closeButton.Font = Enum.Font.GothamBold
+closeButton.TextSize = 18
+makeCorner(closeButton, 8)
+closeButton.Parent = panel
+
+local scrollFrame = Instance.new("ScrollingFrame")
+scrollFrame.Size = UDim2.new(1, -20, 1, -55)
+scrollFrame.Position = UDim2.new(0, 10, 0, 45)
+scrollFrame.BackgroundTransparency = 1
+scrollFrame.ScrollBarThickness = 6
+scrollFrame.CanvasSize = UDim2.new(0, 0, 0, 0)
+scrollFrame.AutomaticCanvasSize = Enum.AutomaticSize.Y
+local grid = Instance.new("UIGridLayout")
+grid.CellSize = UDim2.new(0, 120, 0, 145)
+grid.CellPadding = UDim2.new(0, 8, 0, 8)
+grid.Parent = scrollFrame
+scrollFrame.Parent = panel
+
+-- ============================================================
+-- EGG PANEL
+-- ============================================================
+
+local eggPanel = Instance.new("Frame")
+eggPanel.Size = UDim2.new(0, 600, 0, 480)
+eggPanel.Position = UDim2.new(0.5, -300, 0.5, -240)
+eggPanel.BackgroundColor3 = Color3.fromRGB(25, 25, 35)
+eggPanel.Visible = false
+makeCorner(eggPanel, 15)
+eggPanel.Parent = gui
+
+local eggPanelTitle = Instance.new("TextLabel")
+eggPanelTitle.Size = UDim2.new(1, 0, 0, 40)
+eggPanelTitle.BackgroundTransparency = 1
+eggPanelTitle.Text = "\xF0\x9F\xA5\x9A Oeufs disponibles"
+eggPanelTitle.TextColor3 = Color3.fromRGB(255, 255, 255)
+eggPanelTitle.Font = Enum.Font.GothamBold
+eggPanelTitle.TextSize = 22
+eggPanelTitle.Parent = eggPanel
+
+local eggCloseBtn = Instance.new("TextButton")
+eggCloseBtn.Size = UDim2.new(0, 35, 0, 35)
+eggCloseBtn.Position = UDim2.new(1, -40, 0, 5)
+eggCloseBtn.BackgroundColor3 = Color3.fromRGB(200, 60, 60)
+eggCloseBtn.Text = "X"
+eggCloseBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+eggCloseBtn.Font = Enum.Font.GothamBold
+eggCloseBtn.TextSize = 18
+makeCorner(eggCloseBtn, 8)
+eggCloseBtn.Parent = eggPanel
+
+local eggScroll = Instance.new("ScrollingFrame")
+eggScroll.Size = UDim2.new(1, -20, 1, -55)
+eggScroll.Position = UDim2.new(0, 10, 0, 45)
+eggScroll.BackgroundTransparency = 1
+eggScroll.ScrollBarThickness = 6
+eggScroll.CanvasSize = UDim2.new(0, 0, 0, 0)
+eggScroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
+local eggList = Instance.new("UIListLayout")
+eggList.Padding = UDim.new(0, 12)
+eggList.Parent = eggScroll
+eggScroll.Parent = eggPanel
+
+-- ============================================================
+-- COMBAT PANEL (NPC Progress)
+-- ============================================================
+
+local combatPanel = Instance.new("Frame")
+combatPanel.Size = UDim2.new(0, 500, 0, 420)
+combatPanel.Position = UDim2.new(0.5, -250, 0.5, -210)
+combatPanel.BackgroundColor3 = Color3.fromRGB(25, 25, 35)
+combatPanel.Visible = false
+makeCorner(combatPanel, 15)
+combatPanel.Parent = gui
+
+local combatTitle = Instance.new("TextLabel")
+combatTitle.Size = UDim2.new(1, 0, 0, 40)
+combatTitle.BackgroundTransparency = 1
+combatTitle.Text = "\xE2\x9A\x94 Dresseurs a battre"
+combatTitle.TextColor3 = Color3.fromRGB(255, 255, 255)
+combatTitle.Font = Enum.Font.GothamBold
+combatTitle.TextSize = 22
+combatTitle.Parent = combatPanel
+
+local combatCloseBtn = Instance.new("TextButton")
+combatCloseBtn.Size = UDim2.new(0, 35, 0, 35)
+combatCloseBtn.Position = UDim2.new(1, -40, 0, 5)
+combatCloseBtn.BackgroundColor3 = Color3.fromRGB(200, 60, 60)
+combatCloseBtn.Text = "X"
+combatCloseBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+combatCloseBtn.Font = Enum.Font.GothamBold
+combatCloseBtn.TextSize = 18
+makeCorner(combatCloseBtn, 8)
+combatCloseBtn.Parent = combatPanel
+
+local combatScroll = Instance.new("ScrollingFrame")
+combatScroll.Size = UDim2.new(1, -20, 1, -55)
+combatScroll.Position = UDim2.new(0, 10, 0, 45)
+combatScroll.BackgroundTransparency = 1
+combatScroll.ScrollBarThickness = 6
+combatScroll.CanvasSize = UDim2.new(0, 0, 0, 0)
+combatScroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
+local combatListLayout = Instance.new("UIListLayout")
+combatListLayout.Padding = UDim.new(0, 10)
+combatListLayout.Parent = combatScroll
+combatScroll.Parent = combatPanel
+
+-- ============================================================
+-- BATTLE UI
+-- ============================================================
+
+local battleFrame = Instance.new("Frame")
+battleFrame.Size = UDim2.new(1, 0, 1, 0)
+battleFrame.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+battleFrame.BackgroundTransparency = 0.3
+battleFrame.Visible = false
+battleFrame.ZIndex = 20
+battleFrame.Parent = gui
+
+local battlePanel = Instance.new("Frame")
+battlePanel.Size = UDim2.new(0, 600, 0, 400)
+battlePanel.Position = UDim2.new(0.5, -300, 0.5, -200)
+battlePanel.BackgroundColor3 = Color3.fromRGB(20, 20, 30)
+battlePanel.ZIndex = 21
+makeCorner(battlePanel, 15)
+battlePanel.Parent = battleFrame
+
+-- Player pet display (left)
+local playerPetFrame = Instance.new("Frame")
+playerPetFrame.Size = UDim2.new(0, 260, 0, 140)
+playerPetFrame.Position = UDim2.new(0, 15, 0, 15)
+playerPetFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 45)
+playerPetFrame.ZIndex = 22
+makeCorner(playerPetFrame, 10)
+playerPetFrame.Parent = battlePanel
+
+local playerPetIcon = Instance.new("Frame")
+playerPetIcon.Size = UDim2.new(0, 50, 0, 50)
+playerPetIcon.Position = UDim2.new(0, 10, 0, 10)
+playerPetIcon.BackgroundColor3 = Color3.fromRGB(100, 200, 100)
+playerPetIcon.ZIndex = 23
+makeCorner(playerPetIcon, 6)
+playerPetIcon.Parent = playerPetFrame
+
+local playerPetImg = Instance.new("ImageLabel")
+playerPetImg.Size = UDim2.new(1, 0, 1, 0)
+playerPetImg.BackgroundTransparency = 1
+playerPetImg.ScaleType = Enum.ScaleType.Fit
+playerPetImg.Visible = false
+playerPetImg.ZIndex = 24
+playerPetImg.Parent = playerPetIcon
+
+local playerPetName = Instance.new("TextLabel")
+playerPetName.Size = UDim2.new(1, -70, 0, 25)
+playerPetName.Position = UDim2.new(0, 65, 0, 10)
+playerPetName.BackgroundTransparency = 1
+playerPetName.Text = ""
+playerPetName.TextColor3 = Color3.fromRGB(255, 255, 255)
+playerPetName.Font = Enum.Font.GothamBold
+playerPetName.TextSize = 16
+playerPetName.TextXAlignment = Enum.TextXAlignment.Left
+playerPetName.ZIndex = 23
+playerPetName.Parent = playerPetFrame
+
+local playerHpBarBg = Instance.new("Frame")
+playerHpBarBg.Size = UDim2.new(1, -70, 0, 20)
+playerHpBarBg.Position = UDim2.new(0, 65, 0, 40)
+playerHpBarBg.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+playerHpBarBg.ZIndex = 23
+makeCorner(playerHpBarBg, 4)
+playerHpBarBg.Parent = playerPetFrame
+
+local playerHpBar = Instance.new("Frame")
+playerHpBar.Size = UDim2.new(1, 0, 1, 0)
+playerHpBar.BackgroundColor3 = Color3.fromRGB(50, 200, 50)
+playerHpBar.ZIndex = 24
+makeCorner(playerHpBar, 4)
+playerHpBar.Parent = playerHpBarBg
+
+local playerHpText = Instance.new("TextLabel")
+playerHpText.Size = UDim2.new(1, 0, 0, 20)
+playerHpText.Position = UDim2.new(0, 65, 0, 65)
+playerHpText.BackgroundTransparency = 1
+playerHpText.Text = ""
+playerHpText.TextColor3 = Color3.fromRGB(200, 255, 200)
+playerHpText.Font = Enum.Font.GothamBold
+playerHpText.TextSize = 14
+playerHpText.TextXAlignment = Enum.TextXAlignment.Left
+playerHpText.ZIndex = 23
+playerHpText.Parent = playerPetFrame
+
+local playerPetCount = Instance.new("TextLabel")
+playerPetCount.Size = UDim2.new(1, -20, 0, 25)
+playerPetCount.Position = UDim2.new(0, 10, 0, 100)
+playerPetCount.BackgroundTransparency = 1
+playerPetCount.Text = ""
+playerPetCount.TextColor3 = Color3.fromRGB(180, 180, 180)
+playerPetCount.Font = Enum.Font.GothamBold
+playerPetCount.TextSize = 13
+playerPetCount.ZIndex = 23
+playerPetCount.Parent = playerPetFrame
+
+-- NPC pet display (right)
+local npcPetFrame = Instance.new("Frame")
+npcPetFrame.Size = UDim2.new(0, 260, 0, 140)
+npcPetFrame.Position = UDim2.new(1, -275, 0, 15)
+npcPetFrame.BackgroundColor3 = Color3.fromRGB(45, 30, 30)
+npcPetFrame.ZIndex = 22
+makeCorner(npcPetFrame, 10)
+npcPetFrame.Parent = battlePanel
+
+local npcPetIcon = Instance.new("Frame")
+npcPetIcon.Size = UDim2.new(0, 50, 0, 50)
+npcPetIcon.Position = UDim2.new(0, 10, 0, 10)
+npcPetIcon.BackgroundColor3 = Color3.fromRGB(200, 100, 100)
+npcPetIcon.ZIndex = 23
+makeCorner(npcPetIcon, 6)
+npcPetIcon.Parent = npcPetFrame
+
+local npcPetImg = Instance.new("ImageLabel")
+npcPetImg.Size = UDim2.new(1, 0, 1, 0)
+npcPetImg.BackgroundTransparency = 1
+npcPetImg.ScaleType = Enum.ScaleType.Fit
+npcPetImg.Visible = false
+npcPetImg.ZIndex = 24
+npcPetImg.Parent = npcPetIcon
+
+local npcPetName = Instance.new("TextLabel")
+npcPetName.Size = UDim2.new(1, -70, 0, 25)
+npcPetName.Position = UDim2.new(0, 65, 0, 10)
+npcPetName.BackgroundTransparency = 1
+npcPetName.Text = ""
+npcPetName.TextColor3 = Color3.fromRGB(255, 255, 255)
+npcPetName.Font = Enum.Font.GothamBold
+npcPetName.TextSize = 16
+npcPetName.TextXAlignment = Enum.TextXAlignment.Left
+npcPetName.ZIndex = 23
+npcPetName.Parent = npcPetFrame
+
+local npcHpBarBg = Instance.new("Frame")
+npcHpBarBg.Size = UDim2.new(1, -70, 0, 20)
+npcHpBarBg.Position = UDim2.new(0, 65, 0, 40)
+npcHpBarBg.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+npcHpBarBg.ZIndex = 23
+makeCorner(npcHpBarBg, 4)
+npcHpBarBg.Parent = npcPetFrame
+
+local npcHpBar = Instance.new("Frame")
+npcHpBar.Size = UDim2.new(1, 0, 1, 0)
+npcHpBar.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
+npcHpBar.ZIndex = 24
+makeCorner(npcHpBar, 4)
+npcHpBar.Parent = npcHpBarBg
+
+local npcHpText = Instance.new("TextLabel")
+npcHpText.Size = UDim2.new(1, 0, 0, 20)
+npcHpText.Position = UDim2.new(0, 65, 0, 65)
+npcHpText.BackgroundTransparency = 1
+npcHpText.Text = ""
+npcHpText.TextColor3 = Color3.fromRGB(255, 200, 200)
+npcHpText.Font = Enum.Font.GothamBold
+npcHpText.TextSize = 14
+npcHpText.TextXAlignment = Enum.TextXAlignment.Left
+npcHpText.ZIndex = 23
+npcHpText.Parent = npcPetFrame
+
+local npcPetCount = Instance.new("TextLabel")
+npcPetCount.Size = UDim2.new(1, -20, 0, 25)
+npcPetCount.Position = UDim2.new(0, 10, 0, 100)
+npcPetCount.BackgroundTransparency = 1
+npcPetCount.Text = ""
+npcPetCount.TextColor3 = Color3.fromRGB(180, 180, 180)
+npcPetCount.Font = Enum.Font.GothamBold
+npcPetCount.TextSize = 13
+npcPetCount.ZIndex = 23
+npcPetCount.Parent = npcPetFrame
+
+-- Battle log
+local battleLog = Instance.new("TextLabel")
+battleLog.Size = UDim2.new(1, -30, 0, 80)
+battleLog.Position = UDim2.new(0, 15, 0, 170)
+battleLog.BackgroundColor3 = Color3.fromRGB(15, 15, 25)
+battleLog.Text = ""
+battleLog.TextColor3 = Color3.fromRGB(255, 255, 255)
+battleLog.Font = Enum.Font.GothamBold
+battleLog.TextSize = 16
+battleLog.TextWrapped = true
+battleLog.ZIndex = 22
+makeCorner(battleLog, 8)
+battleLog.Parent = battlePanel
+
+-- Charge bar
+local chargeBarBg = Instance.new("Frame")
+chargeBarBg.Size = UDim2.new(0, 360, 0, 22)
+chargeBarBg.Position = UDim2.new(0.5, -180, 0, 260)
+chargeBarBg.BackgroundColor3 = Color3.fromRGB(40, 40, 50)
+chargeBarBg.ZIndex = 22
+makeCorner(chargeBarBg, 6)
+chargeBarBg.Parent = battlePanel
+
+local chargeBar = Instance.new("Frame")
+chargeBar.Size = UDim2.new(0, 0, 1, 0)
+chargeBar.BackgroundColor3 = Color3.fromRGB(255, 200, 50)
+chargeBar.ZIndex = 23
+makeCorner(chargeBar, 6)
+chargeBar.Parent = chargeBarBg
+
+local chargeText = Instance.new("TextLabel")
+chargeText.Size = UDim2.new(1, 0, 1, 0)
+chargeText.BackgroundTransparency = 1
+chargeText.Text = "Charge: 0%"
+chargeText.TextColor3 = Color3.fromRGB(255, 255, 255)
+chargeText.Font = Enum.Font.GothamBold
+chargeText.TextSize = 14
+chargeText.ZIndex = 24
+chargeText.Parent = chargeBarBg
+
+-- Bouton Attaque de base
+local attackBtn = Instance.new("TextButton")
+attackBtn.Size = UDim2.new(0, 110, 0, 50)
+attackBtn.Position = UDim2.new(0.5, -245, 0, 290)
+attackBtn.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
+attackBtn.Text = "\xE2\x9A\x94 Attaquer"
+attackBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+attackBtn.Font = Enum.Font.GothamBold
+attackBtn.TextSize = 15
+attackBtn.ZIndex = 22
+makeCorner(attackBtn, 10)
+attackBtn.Parent = battlePanel
+
+-- Bouton Special 1: Lame de Feu (50% charge, x2 dmg)
+local special1Btn = Instance.new("TextButton")
+special1Btn.Size = UDim2.new(0, 110, 0, 50)
+special1Btn.Position = UDim2.new(0.5, -130, 0, 290)
+special1Btn.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
+special1Btn.Text = "\xF0\x9F\x94\xA5 Lame de Feu"
+special1Btn.TextColor3 = Color3.fromRGB(180, 180, 180)
+special1Btn.Font = Enum.Font.GothamBold
+special1Btn.TextSize = 13
+special1Btn.ZIndex = 22
+makeCorner(special1Btn, 10)
+special1Btn.Parent = battlePanel
+
+-- Bouton Special 2: Tempete Glace (75% charge, x3 dmg)
+local special2Btn = Instance.new("TextButton")
+special2Btn.Size = UDim2.new(0, 110, 0, 50)
+special2Btn.Position = UDim2.new(0.5, -15, 0, 290)
+special2Btn.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
+special2Btn.Text = "\xE2\x9D\x84\xEF\xB8\x8F Tempete Glace"
+special2Btn.TextColor3 = Color3.fromRGB(180, 180, 180)
+special2Btn.Font = Enum.Font.GothamBold
+special2Btn.TextSize = 13
+special2Btn.ZIndex = 22
+makeCorner(special2Btn, 10)
+special2Btn.Parent = battlePanel
+
+-- Bouton Special 3: Frappe Divine (100% charge, x5 dmg)
+local special3Btn = Instance.new("TextButton")
+special3Btn.Size = UDim2.new(0, 110, 0, 50)
+special3Btn.Position = UDim2.new(0.5, 100, 0, 290)
+special3Btn.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
+special3Btn.Text = "\xE2\x9C\xA8 Frappe Divine"
+special3Btn.TextColor3 = Color3.fromRGB(180, 180, 180)
+special3Btn.Font = Enum.Font.GothamBold
+special3Btn.TextSize = 13
+special3Btn.ZIndex = 22
+makeCorner(special3Btn, 10)
+special3Btn.Parent = battlePanel
+
+-- Bouton Changer de pet
+local switchBtn = Instance.new("TextButton")
+switchBtn.Size = UDim2.new(0, 110, 0, 50)
+switchBtn.Position = UDim2.new(0.5, 215, 0, 290)
+switchBtn.BackgroundColor3 = Color3.fromRGB(50, 120, 200)
+switchBtn.Text = "\xF0\x9F\x94\x84 Changer"
+switchBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+switchBtn.Font = Enum.Font.GothamBold
+switchBtn.TextSize = 15
+switchBtn.ZIndex = 22
+makeCorner(switchBtn, 10)
+switchBtn.Parent = battlePanel
+
+-- Bouton Super (ancien, garde pour compat)
+local superBtn = Instance.new("TextButton")
+superBtn.Size = UDim2.new(0, 0, 0, 0)
+superBtn.Visible = false
+superBtn.ZIndex = 22
+superBtn.Parent = battlePanel
+
+-- Bouton Fuir
+local fleeBtn = Instance.new("TextButton")
+fleeBtn.BackgroundColor3 = Color3.fromRGB(120, 60, 60)
+fleeBtn.Text = "\xF0\x9F\x8F\x83 Fuir"
+fleeBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+fleeBtn.Font = Enum.Font.GothamBold
+fleeBtn.TextSize = 15
+fleeBtn.ZIndex = 22
+makeCorner(fleeBtn, 10)
+fleeBtn.Parent = battlePanel
+
+-- Nouvelle disposition : le panneau est en bas de l'ecran (on voit l'arene 3D derriere)
+-- et les 6 boutons tiennent tous dans le panneau.
+battleFrame.BackgroundTransparency = 1
+battlePanel.Size = UDim2.new(0, 640, 0, 400)
+battlePanel.Position = UDim2.new(0.5, -320, 1, -410)
+battlePanel.BackgroundTransparency = 0.12
+for i, btn in ipairs({ attackBtn, special1Btn, special2Btn, special3Btn, switchBtn, fleeBtn }) do
+    btn.Size = UDim2.new(0, 100, 0, 50)
+    btn.Position = UDim2.new(0, 10 + (i - 1) * 106, 0, 290)
+end
+
+-- Battle result label
+local battleResult = Instance.new("TextLabel")
+battleResult.Size = UDim2.new(1, 0, 0, 60)
+battleResult.Position = UDim2.new(0, 0, 0, 330)
+battleResult.BackgroundTransparency = 1
+battleResult.Text = ""
+battleResult.TextColor3 = Color3.fromRGB(255, 255, 255)
+battleResult.Font = Enum.Font.GothamBlack
+battleResult.TextSize = 26
+battleResult.ZIndex = 25
+battleResult.Parent = battlePanel
+
+-- ============================================================
+-- HATCH FRAME
+-- ============================================================
+
+local hatchFrame = Instance.new("Frame")
+hatchFrame.Size = UDim2.new(1, 0, 1, 0)
+hatchFrame.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+hatchFrame.BackgroundTransparency = 1
+hatchFrame.Visible = false
+hatchFrame.ZIndex = 10
+hatchFrame.Parent = gui
+
+local hatchLabel = Instance.new("TextLabel")
+hatchLabel.Size = UDim2.new(0, 500, 0, 100)
+hatchLabel.Position = UDim2.new(0.5, -250, 0.5, -100)
+hatchLabel.BackgroundTransparency = 1
+hatchLabel.Text = ""
+hatchLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+hatchLabel.Font = Enum.Font.GothamBlack
+hatchLabel.TextSize = 30
+hatchLabel.ZIndex = 11
+hatchLabel.Parent = hatchFrame
+
+local hatchImage = Instance.new("ImageLabel")
+hatchImage.Size = UDim2.new(0, 160, 0, 160)
+hatchImage.Position = UDim2.new(0.5, -80, 0.5, -270)
+hatchImage.BackgroundTransparency = 1
+hatchImage.ScaleType = Enum.ScaleType.Fit
+hatchImage.Visible = false
+hatchImage.ZIndex = 11
+hatchImage.Parent = hatchFrame
+
+-- ============================================================
+-- PET PANEL LOGIC
+-- ============================================================
+
+local function refreshPanel()
+    for _, child in ipairs(scrollFrame:GetChildren()) do
+        if child:IsA("Frame") then child:Destroy() end
+    end
+
+    for _, pet in ipairs(state.pets) do
+        local card = Instance.new("Frame")
+        card.Name = "PetCard" .. tostring(pet.id)
+        card.BackgroundColor3 = RARITY_COLORS[pet.rarity] or Color3.fromRGB(100, 100, 100)
+        makeCorner(card, 8)
+
+        local petIcon = Instance.new("Frame")
+        petIcon.Size = UDim2.new(1, -10, 0, 55)
+        petIcon.Position = UDim2.new(0, 5, 0, 5)
+        petIcon.BackgroundColor3 = colorFromData(pet.color)
+        makeCorner(petIcon, 6)
+        petIcon.Parent = card
+        local petImg = getPetImage(pet.name)
+        if petImg then
+            local im = Instance.new("ImageLabel")
+            im.Size = UDim2.new(1, 0, 1, 0)
+            im.BackgroundTransparency = 1
+            im.Image = petImg
+            im.ScaleType = Enum.ScaleType.Fit
+            im.Parent = petIcon
+        end
+
+        local petName = Instance.new("TextLabel")
+        petName.Size = UDim2.new(1, 0, 0, 20)
+        petName.Position = UDim2.new(0, 0, 0, 62)
+        petName.BackgroundTransparency = 1
+        petName.Text = pet.name
+        petName.TextColor3 = Color3.fromRGB(255, 255, 255)
+        petName.Font = Enum.Font.GothamBold
+        petName.TextSize = 13
+        petName.Parent = card
+
+        local petInfo = Instance.new("TextLabel")
+        petInfo.Size = UDim2.new(1, 0, 0, 14)
+        petInfo.Position = UDim2.new(0, 0, 0, 80)
+        petInfo.BackgroundTransparency = 1
+        petInfo.Text = pet.rarity
+        petInfo.TextColor3 = Color3.fromRGB(200, 200, 200)
+        petInfo.Font = Enum.Font.Gotham
+        petInfo.TextSize = 11
+        petInfo.Parent = card
+
+        local incomeText = Instance.new("TextLabel")
+        incomeText.Size = UDim2.new(1, 0, 0, 16)
+        incomeText.Position = UDim2.new(0, 0, 0, 94)
+        incomeText.BackgroundTransparency = 1
+        incomeText.Text = "+" .. tostring(pet.income or 0) .. "/s"
+        incomeText.TextColor3 = Color3.fromRGB(100, 255, 100)
+        incomeText.Font = Enum.Font.GothamBold
+        incomeText.TextSize = 12
+        incomeText.Parent = card
+
+        local equipBtn = Instance.new("TextButton")
+        equipBtn.Size = UDim2.new(1, -10, 0, 25)
+        equipBtn.Position = UDim2.new(0, 5, 1, -30)
+        equipBtn.Font = Enum.Font.GothamBold
+        equipBtn.TextSize = 13
+        equipBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+        makeCorner(equipBtn, 6)
+        equipBtn.Parent = card
+
+        local isEquipped = false
+        for _, id in ipairs(state.equipped) do
+            if id == pet.id then isEquipped = true break end
+        end
+
+        if isEquipped then
+            equipBtn.Text = "Retirer"
+            equipBtn.BackgroundColor3 = Color3.fromRGB(180, 60, 60)
+        else
+            equipBtn.Text = "Equiper"
+            equipBtn.BackgroundColor3 = Color3.fromRGB(40, 120, 60)
+        end
+
+        equipBtn.MouseButton1Click:Connect(function()
+            EquipPet:FireServer(pet.id)
+        end)
+
+        card.Parent = scrollFrame
+    end
+end
+
+-- ============================================================
+-- EGG PANEL LOGIC
+-- ============================================================
+
+local function refreshEggPanel()
+    for _, child in ipairs(eggScroll:GetChildren()) do
+        if child:IsA("Frame") then child:Destroy() end
+    end
+
+    for _, egg in ipairs(eggData) do
+        local section = Instance.new("Frame")
+        section.Size = UDim2.new(1, 0, 0, 210)
+        section.BackgroundColor3 = Color3.fromRGB(35, 35, 50)
+        section.AutomaticSize = Enum.AutomaticSize.Y
+        makeCorner(section, 12)
+        section.Parent = eggScroll
+
+        local header = Instance.new("Frame")
+        header.Size = UDim2.new(1, 0, 0, 50)
+        header.BackgroundColor3 = colorFromData(egg.color)
+        header.BackgroundTransparency = 0.2
+        makeCorner(header, 10)
+        header.Parent = section
+
+        local eggTitle = Instance.new("TextLabel")
+        eggTitle.Size = UDim2.new(1, -20, 1, 0)
+        eggTitle.Position = UDim2.new(0, 10, 0, 0)
+        eggTitle.BackgroundTransparency = 1
+        eggTitle.Text = egg.name .. "  -  " .. egg.price .. " Coins"
+        eggTitle.TextColor3 = Color3.fromRGB(255, 255, 255)
+        eggTitle.Font = Enum.Font.GothamBold
+        eggTitle.TextSize = 18
+        eggTitle.TextXAlignment = Enum.TextXAlignment.Left
+        eggTitle.Parent = header
+
+        local petList = Instance.new("Frame")
+        petList.Size = UDim2.new(1, 0, 0, 150)
+        petList.Position = UDim2.new(0, 0, 0, 55)
+        petList.BackgroundTransparency = 1
+        petList.AutomaticSize = Enum.AutomaticSize.Y
+        local petListLayout = Instance.new("UIListLayout")
+        petListLayout.Padding = UDim.new(0, 6)
+        petListLayout.Parent = petList
+        petList.Parent = section
+
+        for _, petInfo in ipairs(egg.pool) do
+            local row = Instance.new("Frame")
+            row.Size = UDim2.new(1, -20, 0, 40)
+            row.Position = UDim2.new(0, 10, 0, 0)
+            row.BackgroundColor3 = Color3.fromRGB(40, 40, 55)
+            makeCorner(row, 6)
+            row.Parent = petList
+
+			-- Image de l'animal dans la liste de l'oeuf
+			local petImage = Instance.new("ImageLabel")
+			petImage.Name = "PetImage"
+			petImage.Size = UDim2.new(0, 32, 0, 32)
+			petImage.Position = UDim2.new(0, 5, 0.5, -16)
+			petImage.BackgroundTransparency = 1
+			petImage.ScaleType = Enum.ScaleType.Fit
+
+			local imageId = getPetImage(petInfo.name)
+			petImage.Image = imageId or ""
+			if not imageId then
+				-- pas d'image renseignee : pastille de couleur a la place
+				petImage.BackgroundTransparency = 0
+				petImage.BackgroundColor3 = colorFromData(petInfo.color)
+				makeCorner(petImage, 6)
+			end
+
+			-- Vérifier si le joueur possède déjà cet animal
+			local owned = false
+
+			for _, ownedPet in ipairs(state.pets) do
+				if ownedPet.name == petInfo.name then
+					owned = true
+					break
+				end
+			end
+
+			-- Noir si non possédé, couleur normale si possédé
+			petImage.ImageColor3 = owned
+				and Color3.fromRGB(255, 255, 255)
+				or Color3.fromRGB(0, 0, 0)
+
+			if not imageId and not owned then
+				petImage.BackgroundColor3 = petImage.BackgroundColor3:Lerp(Color3.new(0, 0, 0), 0.7)
+			end
+
+			petImage.Parent = row
+
+            local nameLabel = Instance.new("TextLabel")
+			nameLabel.Size = UDim2.new(0, 150, 1, 0)
+			nameLabel.Position = UDim2.new(0, 44, 0, 0)
+            nameLabel.BackgroundTransparency = 1
+            nameLabel.Text = petInfo.name
+            nameLabel.TextColor3 = RARITY_COLORS[petInfo.rarity] or Color3.fromRGB(255, 255, 255)
+            nameLabel.Font = Enum.Font.GothamBold
+            nameLabel.TextSize = 14
+            nameLabel.TextXAlignment = Enum.TextXAlignment.Left
+            nameLabel.Parent = row
+
+            local incomeLbl = Instance.new("TextLabel")
+            incomeLbl.Size = UDim2.new(0, 80, 1, 0)
+            incomeLbl.Position = UDim2.new(1, -145, 0, 0)
+            incomeLbl.BackgroundTransparency = 1
+            incomeLbl.Text = "+" .. petInfo.income .. "/s"
+            incomeLbl.TextColor3 = Color3.fromRGB(100, 255, 100)
+            incomeLbl.Font = Enum.Font.GothamBold
+            incomeLbl.TextSize = 13
+            incomeLbl.TextXAlignment = Enum.TextXAlignment.Right
+            incomeLbl.Parent = row
+
+            local chanceLbl = Instance.new("TextLabel")
+            chanceLbl.Size = UDim2.new(0, 60, 1, 0)
+            chanceLbl.Position = UDim2.new(1, -65, 0, 0)
+            chanceLbl.BackgroundTransparency = 1
+            chanceLbl.Text = petInfo.chance .. "%"
+            chanceLbl.TextColor3 = Color3.fromRGB(255, 220, 100)
+            chanceLbl.Font = Enum.Font.GothamBold
+            chanceLbl.TextSize = 14
+            chanceLbl.TextXAlignment = Enum.TextXAlignment.Right
+            chanceLbl.Parent = row
+        end
+    end
+end
+
+-- ============================================================
+-- COMBAT PANEL LOGIC
+-- ============================================================
+
+local function refreshCombatPanel()
+    for _, child in ipairs(combatScroll:GetChildren()) do
+        if child:IsA("Frame") then child:Destroy() end
+    end
+
+    for i, npc in ipairs(npcData) do
+        local row = Instance.new("Frame")
+        row.Size = UDim2.new(1, 0, 0, 55)
+        row.BackgroundColor3 = npc.defeated and Color3.fromRGB(20, 50, 30) or Color3.fromRGB(50, 30, 30)
+        makeCorner(row, 8)
+        row.Parent = combatScroll
+
+        local colorDot = Instance.new("Frame")
+        colorDot.Size = UDim2.new(0, 40, 0, 40)
+        colorDot.Position = UDim2.new(0, 8, 0, 8)
+        colorDot.BackgroundColor3 = colorFromData(npc.color)
+        makeCorner(colorDot, 6)
+        colorDot.Parent = row
+
+        local nameLbl = Instance.new("TextLabel")
+        nameLbl.Size = UDim2.new(0, 200, 0, 25)
+        nameLbl.Position = UDim2.new(0, 55, 0, 5)
+        nameLbl.BackgroundTransparency = 1
+        nameLbl.Text = npc.name
+        nameLbl.TextColor3 = Color3.fromRGB(255, 255, 255)
+        nameLbl.Font = Enum.Font.GothamBold
+        nameLbl.TextSize = 16
+        nameLbl.TextXAlignment = Enum.TextXAlignment.Left
+        nameLbl.Parent = row
+
+        local infoLbl = Instance.new("TextLabel")
+        infoLbl.Size = UDim2.new(0, 250, 0, 20)
+        infoLbl.Position = UDim2.new(0, 55, 0, 30)
+        infoLbl.BackgroundTransparency = 1
+        infoLbl.Text = npc.petCount .. " pets | Recompense: " .. npc.reward .. " coins"
+        infoLbl.TextColor3 = Color3.fromRGB(200, 200, 200)
+        infoLbl.Font = Enum.Font.Gotham
+        infoLbl.TextSize = 13
+        infoLbl.TextXAlignment = Enum.TextXAlignment.Left
+        infoLbl.Parent = row
+
+        local statusLbl = Instance.new("TextLabel")
+        statusLbl.Size = UDim2.new(0, 100, 0, 30)
+        statusLbl.Position = UDim2.new(1, -110, 0, 13)
+        statusLbl.BackgroundTransparency = 1
+        if npc.defeated then
+            statusLbl.Text = "Vaincu"
+            statusLbl.TextColor3 = Color3.fromRGB(100, 255, 100)
+        else
+            statusLbl.Text = "A battre"
+            statusLbl.TextColor3 = Color3.fromRGB(255, 150, 150)
+        end
+        statusLbl.Font = Enum.Font.GothamBold
+        statusLbl.TextSize = 15
+        statusLbl.Position = UDim2.new(1, -215, 0, 13)
+        statusLbl.Parent = row
+
+        local fightBtn = Instance.new("TextButton")
+        fightBtn.Size = UDim2.new(0, 100, 0, 35)
+        fightBtn.Position = UDim2.new(1, -110, 0, 10)
+        fightBtn.BackgroundColor3 = Color3.fromRGB(200, 60, 60)
+        fightBtn.Text = "\xE2\x9A\x94 Combattre"
+        fightBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+        fightBtn.Font = Enum.Font.GothamBold
+        fightBtn.TextSize = 13
+        makeCorner(fightBtn, 8)
+        fightBtn.Parent = row
+        fightBtn.MouseButton1Click:Connect(function()
+            combatPanel.Visible = false
+            BattleRequest:FireServer(i)
+        end)
+    end
+
+    rebirthButton.Visible = rebirthButton:GetAttribute("Ready") == true and #npcData > 0
+end
+
+-- ============================================================
+-- BATTLE UI LOGIC
+-- ============================================================
+
+local battleData = nil
+local battleSerial = 0
+
+local function updateBattleUI(data)
+    battleData = data
+    if not data then return end
+
+    local myPet = data.playerPets[data.playerCurrent]
+    local enemyPet = data.npcPets[data.npcCurrent]
+
+    if myPet then
+        playerPetName.Text = myPet.name
+        playerPetIcon.BackgroundColor3 = colorFromData(myPet.color)
+        local myImg = getPetImage(myPet.name)
+        playerPetImg.Image = myImg or ""
+        playerPetImg.Visible = myImg ~= nil
+        local hpPct = myPet.hp / myPet.maxHp
+        playerHpBar.Size = UDim2.new(hpPct, 0, 1, 0)
+        playerHpBar.BackgroundColor3 = Color3.fromRGB(
+            math.floor(50 + (1 - hpPct) * 150),
+            math.floor(200 * hpPct),
+            50
+        )
+        playerHpText.Text = myPet.hp .. " / " .. myPet.maxHp .. " HP"
+        playerPetCount.Text = "Pet " .. data.playerCurrent .. " / " .. #data.playerPets
+    end
+
+    if enemyPet then
+        npcPetName.Text = enemyPet.name
+        npcPetIcon.BackgroundColor3 = colorFromData(enemyPet.color)
+        local enImg = getPetImage(enemyPet.name)
+        npcPetImg.Image = enImg or ""
+        npcPetImg.Visible = enImg ~= nil
+        local hpPct = enemyPet.hp / enemyPet.maxHp
+        npcHpBar.Size = UDim2.new(hpPct, 0, 1, 0)
+        npcHpBar.BackgroundColor3 = Color3.fromRGB(
+            math.floor(200 * hpPct + 50),
+            math.floor(80 * (1 - hpPct)),
+            math.floor(50 * (1 - hpPct))
+        )
+        npcHpText.Text = enemyPet.hp .. " / " .. enemyPet.maxHp .. " HP"
+        npcPetCount.Text = "Pet " .. data.npcCurrent .. " / " .. #data.npcPets
+    end
+
+    battleLog.Text = data.log or ""
+    fleeBtn.Visible = (data.active == true)
+
+    -- Calculer la charge POURTOUR d'abord
+    local charge = data.playerCharge or 0
+    local maxCharge = data.playerMaxCharge or 100
+    local chargePct = maxCharge > 0 and (charge / maxCharge) or 0
+
+    chargeBar.Size = UDim2.new(chargePct, 0, 1, 0)
+    if chargePct >= 1 then
+        chargeBar.BackgroundColor3 = Color3.fromRGB(255, 220, 80)
+        chargeText.Text = "CHARGE MAX !"
+        chargeText.TextColor3 = Color3.fromRGB(50, 50, 0)
+    else
+        chargeBar.BackgroundColor3 = Color3.fromRGB(255, math.floor(180 - 120 * chargePct), 50)
+        chargeText.Text = "Charge: " .. math.floor(chargePct * 100) .. "%"
+        chargeText.TextColor3 = Color3.fromRGB(255, 255, 255)
+    end
+
+    if data.active then
+        if data.turn == "player" then
+            attackBtn.Visible = true
+            switchBtn.Visible = #data.playerPets > 1
+
+            -- Special 1: Lame de Feu (50% charge)
+            local canS1 = chargePct >= 0.5
+            if canS1 then
+                special1Btn.Visible = true
+                special1Btn.BackgroundColor3 = Color3.fromRGB(255, 100, 30)
+                special1Btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+            else
+                special1Btn.Visible = true
+                special1Btn.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
+                special1Btn.TextColor3 = Color3.fromRGB(120, 120, 120)
+            end
+
+            -- Special 2: Tempete Glace (75% charge)
+            local canS2 = chargePct >= 0.75
+            if canS2 then
+                special2Btn.Visible = true
+                special2Btn.BackgroundColor3 = Color3.fromRGB(80, 180, 255)
+                special2Btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+            else
+                special2Btn.Visible = true
+                special2Btn.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
+                special2Btn.TextColor3 = Color3.fromRGB(120, 120, 120)
+            end
+
+            -- Special 3: Frappe Divine (100% charge)
+            local canS3 = chargePct >= 1.0
+            if canS3 then
+                special3Btn.Visible = true
+                special3Btn.BackgroundColor3 = Color3.fromRGB(255, 220, 80)
+                special3Btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+            else
+                special3Btn.Visible = true
+                special3Btn.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
+                special3Btn.TextColor3 = Color3.fromRGB(120, 120, 120)
+            end
+
+            superBtn.Visible = false
+            battleResult.Text = ""
+        else
+            attackBtn.Visible = false
+            switchBtn.Visible = false
+            special1Btn.Visible = false
+            special2Btn.Visible = false
+            special3Btn.Visible = false
+            superBtn.Visible = false
+            battleResult.Text = "Tour de l'adversaire..."
+        end
+    else
+        attackBtn.Visible = false
+        switchBtn.Visible = false
+        special1Btn.Visible = false
+        special2Btn.Visible = false
+        special3Btn.Visible = false
+        superBtn.Visible = false
+        if string.find(data.log or "", "VICTOIRE") then
+            battleResult.Text = "VICTOIRE !"
+            battleResult.TextColor3 = Color3.fromRGB(100, 255, 100)
+        elseif string.find(data.log or "", "Defaite") then
+            battleResult.Text = "DEFAITE"
+            battleResult.TextColor3 = Color3.fromRGB(255, 80, 80)
+        end
+        local serial = battleSerial
+        task.delay(3, function()
+            if serial ~= battleSerial then return end
+            battleFrame.Visible = false
+        end)
+    end
+end
+
+attackBtn.MouseButton1Click:Connect(function()
+    BattleAction:FireServer("attack")
+end)
+
+switchBtn.MouseButton1Click:Connect(function()
+    BattleAction:FireServer("switch")
+end)
+
+special1Btn.MouseButton1Click:Connect(function()
+    BattleAction:FireServer("special1")
+end)
+
+special2Btn.MouseButton1Click:Connect(function()
+    BattleAction:FireServer("special2")
+end)
+
+special3Btn.MouseButton1Click:Connect(function()
+    BattleAction:FireServer("special3")
+end)
+
+superBtn.MouseButton1Click:Connect(function()
+    BattleAction:FireServer("super")
+end)
+
+-- ============================================================
+-- TOGGLES
+-- ============================================================
+
+fleeBtn.MouseButton1Click:Connect(function()
+    BattleAction:FireServer("flee")
+end)
+
+invButton.MouseButton1Click:Connect(function()
+    panel.Visible = not panel.Visible
+    if panel.Visible then
+        eggPanel.Visible = false
+        combatPanel.Visible = false
+        refreshPanel()
+    end
+end)
+
+closeButton.MouseButton1Click:Connect(function()
+    panel.Visible = false
+end)
+
+eggButton.MouseButton1Click:Connect(function()
+    eggPanel.Visible = not eggPanel.Visible
+    if eggPanel.Visible then
+        panel.Visible = false
+        combatPanel.Visible = false
+        refreshEggPanel()
+    end
+end)
+
+eggCloseBtn.MouseButton1Click:Connect(function()
+    eggPanel.Visible = false
+end)
+
+combatButton.MouseButton1Click:Connect(function()
+    combatPanel.Visible = not combatPanel.Visible
+    if combatPanel.Visible then
+        panel.Visible = false
+        eggPanel.Visible = false
+        refreshCombatPanel()
+    end
+end)
+
+combatCloseBtn.MouseButton1Click:Connect(function()
+    combatPanel.Visible = false
+end)
+
+rebirthButton.MouseButton1Click:Connect(function()
+    RebirthRemote:FireServer()
+end)
+
+-- ============================================================
+-- STATE UPDATE
+-- ============================================================
+
+StateUpdate.OnClientEvent:Connect(function(newState, income)
+    state = newState
+    incomePerSec = income or 0
+    coinLabel.Text = ((tostring(math.floor(state.coins or 0)):reverse():gsub("(%d%d%d)", "%1 "):reverse():gsub("^%s+", ""))) .. " Coins"
+    incomeLabel.Text = "+" .. incomePerSec .. " /sec"
+    rebirthLabel.Text = "Renaissance: " .. tostring(state.rebirthLevel or 0)
+    if panel.Visible then refreshPanel() end
+    if combatPanel.Visible then refreshCombatPanel() end
+end)
+
+-- ============================================================
+-- EGG INFO
+-- ============================================================
+
+EggInfo.OnClientEvent:Connect(function(data)
+    eggData = data
+    if eggPanel.Visible then refreshEggPanel() end
+end)
+
+-- ============================================================
+-- NPC INFO
+-- ============================================================
+
+NPCInfo.OnClientEvent:Connect(function(data, total, rb)
+    npcData = data
+    totalNPCs = total or 0
+    -- le serveur dit si la renaissance est possible (dresseurs des mondes debloques battus)
+    local ready = type(rb) == "table" and (rb.needed or 0) > 0 and (rb.done or 0) >= (rb.needed or 0)
+    rebirthButton:SetAttribute("Ready", ready)
+    if combatPanel.Visible then refreshCombatPanel() end
+    rebirthButton.Visible = ready and #npcData > 0
+end)
+
+-- ============================================================
+-- BATTLE EVENTS
+-- ============================================================
+
+BattleStart.OnClientEvent:Connect(function(data)
+    if data.success then
+        battleSerial = battleSerial + 1
+        battleFrame.Visible = true
+        battleResult.Text = ""
+        updateBattleUI(data)
+    else
+        hatchFrame.Visible = true
+        hatchFrame.BackgroundTransparency = 0.5
+        hatchLabel.Text = data.message or "Erreur"
+        hatchLabel.TextColor3 = Color3.fromRGB(255, 100, 100)
+        hatchLabel.TextSize = 24
+        task.wait(2)
+        hatchFrame.Visible = false
+    end
+end)
+
+BattleUpdate.OnClientEvent:Connect(function(data)
+    updateBattleUI(data)
+end)
+
+RebirthRemote.OnClientEvent:Connect(function(data)
+    if data.success then
+        hatchFrame.Visible = true
+        hatchFrame.BackgroundTransparency = 0.3
+        hatchLabel.Text = "RENAISSANCE !\nNiveau: " .. data.rebirthLevel .. "\nMultiplier x" .. (1 + data.rebirthLevel * 0.5)
+        hatchLabel.TextColor3 = Color3.fromRGB(200, 100, 255)
+        hatchLabel.TextSize = 28
+        task.wait(3)
+        hatchFrame.Visible = false
+        rebirthButton.Visible = false
+    else
+        hatchFrame.Visible = true
+        hatchFrame.BackgroundTransparency = 0.5
+        hatchLabel.Text = data.message or "Erreur"
+        hatchLabel.TextColor3 = Color3.fromRGB(255, 100, 100)
+        hatchLabel.TextSize = 22
+        task.wait(2.5)
+        hatchFrame.Visible = false
+    end
+end)
+	
+-- ============================================================
+-- HATCH ANIMATION
+-- ============================================================
+
+BuyEgg.OnClientEvent:Connect(function(data)
+    if data.success then
+        local pet = data.pet
+        hatchFrame.Visible = true
+        hatchFrame.BackgroundTransparency = 0.5
+
+        hatchLabel.TextSize = 30
+        hatchLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+        hatchLabel.Text = "Eclosion..."
+
+        local tween = TweenService:Create(hatchLabel, TweenInfo.new(0.5), { TextSize = 50 })
+        tween:Play()
+        task.wait(0.5)
+
+        hatchLabel.TextSize = 30
+        local rc = RARITY_COLORS[pet.rarity] or Color3.fromRGB(255, 255, 255)
+        hatchLabel.Text = pet.name .. "\n" .. pet.rarity .. "\n+" .. tostring(pet.income or 0) .. " coins/sec"
+        hatchLabel.TextColor3 = rc
+        local revealImg = getPetImage(pet.name)
+        hatchImage.Image = revealImg or ""
+        hatchImage.Visible = revealImg ~= nil
+
+        task.wait(1.8)
+        hatchImage.Visible = false
+
+        hatchFrame.Visible = false
+    else
+        hatchFrame.Visible = true
+        hatchFrame.BackgroundTransparency = 0.5
+        hatchLabel.Text = data.message or "Erreur"
+        hatchLabel.TextColor3 = Color3.fromRGB(255, 100, 100)
+        hatchLabel.TextSize = 26
+        task.wait(1.5)
+        hatchFrame.Visible = false
+    end
+end)
+
+-- ============================================================
+-- BOUTIQUE ROBUX + MONDES + RACCOURCIS (boutons colonne de droite)
+-- ============================================================
+do
+    local WHITE = Color3.new(1, 1, 1)
+    local ShopBuy = remotes:WaitForChild("ShopBuy")
+    local ShopInfo = remotes:WaitForChild("ShopInfo")
+
+    local shopItems, shopMeta, clockOffset = {}, {}, 0
+    local worldList = {}
+
+    local function fmtTime(sec)
+        sec = math.max(0, math.floor(sec))
+        return string.format("%d:%02d", sec // 60, sec % 60)
+    end
+
+    local function fmtNum(n)
+        return ((tostring(math.floor(n or 0)):reverse():gsub("(%d%d%d)", "%1 "):reverse():gsub("^%s+", "")))
+    end
+
+    local function makeBtn(text, x, y, color)
+        local b = Instance.new("TextButton")
+        b.Size = UDim2.new(0, 120, 0, 45)
+        b.Position = UDim2.new(0, x, 0, y)
+        b.BackgroundColor3 = color
+        b.Text = text
+        b.TextColor3 = WHITE
+        b.Font = Enum.Font.GothamBold
+        b.TextSize = 16
+        makeCorner(b, 10)
+        b.Parent = gui
+        return b
+    end
+
+    -- cree un panneau centre, adapte aux petits ecrans ; renvoie (cadre, zone defilante, texte d'en-tete)
+    local function makePanel(title, maxW, maxH)
+        local f = Instance.new("Frame")
+        f.AnchorPoint = Vector2.new(0.5, 0.5)
+        f.Position = UDim2.new(0.5, 0, 0.5, 0)
+        f.Size = UDim2.new(0.92, 0, 0.85, 0)
+        f.BackgroundColor3 = Color3.fromRGB(25, 25, 35)
+        f.Visible = false
+        f.ZIndex = 5
+        makeCorner(f, 15)
+        local limit = Instance.new("UISizeConstraint")
+        limit.MaxSize = Vector2.new(maxW, maxH)
+        limit.Parent = f
+        f.Parent = gui
+
+        local t = Instance.new("TextLabel")
+        t.Size = UDim2.new(1, -60, 0, 40)
+        t.Position = UDim2.new(0, 15, 0, 0)
+        t.BackgroundTransparency = 1
+        t.Text = title
+        t.TextColor3 = WHITE
+        t.Font = Enum.Font.GothamBold
+        t.TextSize = 22
+        t.TextXAlignment = Enum.TextXAlignment.Left
+        t.ZIndex = 6
+        t.Parent = f
+
+        local x = Instance.new("TextButton")
+        x.Size = UDim2.new(0, 35, 0, 35)
+        x.Position = UDim2.new(1, -40, 0, 5)
+        x.BackgroundColor3 = Color3.fromRGB(200, 60, 60)
+        x.Text = "X"
+        x.TextColor3 = WHITE
+        x.Font = Enum.Font.GothamBold
+        x.TextSize = 18
+        x.ZIndex = 6
+        makeCorner(x, 8)
+        x.Parent = f
+        x.MouseButton1Click:Connect(function() f.Visible = false end)
+
+        local status = Instance.new("TextLabel")
+        status.Size = UDim2.new(1, -30, 0, 28)
+        status.Position = UDim2.new(0, 15, 0, 40)
+        status.BackgroundTransparency = 1
+        status.Text = ""
+        status.TextColor3 = Color3.fromRGB(120, 220, 255)
+        status.Font = Enum.Font.GothamBold
+        status.TextSize = 14
+        status.TextXAlignment = Enum.TextXAlignment.Left
+        status.ZIndex = 6
+        status.Parent = f
+
+        local sc = Instance.new("ScrollingFrame")
+        sc.Size = UDim2.new(1, -20, 1, -80)
+        sc.Position = UDim2.new(0, 10, 0, 72)
+        sc.BackgroundTransparency = 1
+        sc.BorderSizePixel = 0
+        sc.ScrollBarThickness = 6
+        sc.CanvasSize = UDim2.new(0, 0, 0, 0)
+        sc.AutomaticCanvasSize = Enum.AutomaticSize.Y
+        sc.ZIndex = 6
+        sc.Parent = f
+        return f, sc, status
+    end
+
+    local shopPanel, shopScroll, shopStatus = makePanel("\u{1F6D2} Boutique Robux", 620, 520)
+    local shopGrid = Instance.new("UIGridLayout")
+    shopGrid.CellSize = UDim2.new(0.5, -6, 0, 150)
+    shopGrid.CellPadding = UDim2.new(0, 8, 0, 8)
+    shopGrid.SortOrder = Enum.SortOrder.LayoutOrder
+    shopGrid.Parent = shopScroll
+
+    local worldPanel, worldScroll = makePanel("\u{1F30D} Mondes", 520, 420)
+    local worldLayout = Instance.new("UIListLayout")
+    worldLayout.Padding = UDim.new(0, 10)
+    worldLayout.SortOrder = Enum.SortOrder.LayoutOrder
+    worldLayout.Parent = worldScroll
+
+    local function closeOthers(except)
+        for _, p in ipairs({ panel, eggPanel, combatPanel, shopPanel, worldPanel }) do
+            if p ~= except then p.Visible = false end
+        end
+    end
+
+    -- ---------- boutique ----------
+    local function refreshShop()
+        for _, c in ipairs(shopScroll:GetChildren()) do
+            if c:IsA("Frame") then c:Destroy() end
+        end
+        for i, item in ipairs(shopItems) do
+            local card = Instance.new("Frame")
+            card.LayoutOrder = i
+            card.BackgroundColor3 = Color3.fromRGB(40, 40, 58)
+            card.ZIndex = 6
+            makeCorner(card, 12)
+            card.Parent = shopScroll
+
+            local icon = Instance.new("TextLabel")
+            icon.Size = UDim2.new(0, 56, 0, 56)
+            icon.Position = UDim2.new(0, 10, 0, 10)
+            icon.BackgroundColor3 = Color3.fromRGB(60, 55, 90)
+            icon.Text = item.icon or "?"
+            icon.TextScaled = true
+            icon.Font = Enum.Font.GothamBold
+            icon.TextColor3 = WHITE
+            icon.ZIndex = 7
+            makeCorner(icon, 10)
+            icon.Parent = card
+
+            local nameL = Instance.new("TextLabel")
+            nameL.Size = UDim2.new(1, -84, 0, 26)
+            nameL.Position = UDim2.new(0, 76, 0, 10)
+            nameL.BackgroundTransparency = 1
+            nameL.Text = item.name or ""
+            nameL.TextColor3 = Color3.fromRGB(255, 230, 120)
+            nameL.Font = Enum.Font.GothamBold
+            nameL.TextSize = 16
+            nameL.TextXAlignment = Enum.TextXAlignment.Left
+            nameL.TextTruncate = Enum.TextTruncate.AtEnd
+            nameL.ZIndex = 7
+            nameL.Parent = card
+
+            local descL = Instance.new("TextLabel")
+            descL.Size = UDim2.new(1, -84, 0, 44)
+            descL.Position = UDim2.new(0, 76, 0, 36)
+            descL.BackgroundTransparency = 1
+            descL.Text = item.desc or ""
+            descL.TextColor3 = Color3.fromRGB(210, 210, 220)
+            descL.Font = Enum.Font.Gotham
+            descL.TextSize = 12
+            descL.TextWrapped = true
+            descL.TextXAlignment = Enum.TextXAlignment.Left
+            descL.TextYAlignment = Enum.TextYAlignment.Top
+            descL.ZIndex = 7
+            descL.Parent = card
+
+            local buy = Instance.new("TextButton")
+            buy.Size = UDim2.new(1, -20, 0, 36)
+            buy.Position = UDim2.new(0, 10, 1, -46)
+            buy.Font = Enum.Font.GothamBold
+            buy.TextSize = 16
+            buy.TextColor3 = WHITE
+            buy.ZIndex = 7
+            makeCorner(buy, 8)
+            if item.owned then
+                buy.Text = "\u{2714} Possede"
+                buy.BackgroundColor3 = Color3.fromRGB(60, 120, 70)
+            elseif not item.available then
+                buy.Text = "Bientot"
+                buy.BackgroundColor3 = Color3.fromRGB(80, 80, 95)
+            else
+                buy.Text = "R$ " .. tostring(item.price or "?")
+                buy.BackgroundColor3 = Color3.fromRGB(0, 150, 90)
+            end
+            buy.Parent = card
+            buy.MouseButton1Click:Connect(function()
+                if not item.owned then ShopBuy:FireServer(item.key) end
+            end)
+        end
+    end
+
+    ShopInfo.OnClientEvent:Connect(function(list, meta)
+        shopItems = list or {}
+        shopMeta = meta or {}
+        if shopMeta.now then clockOffset = shopMeta.now - os.time() end
+        if shopPanel.Visible then refreshShop() end
+    end)
+
+    task.spawn(function()
+        while true do
+            task.wait(1)
+            if shopPanel.Visible then
+                local now = os.time() + clockOffset
+                local parts = {}
+                if (shopMeta.speedUntil or 0) > now then
+                    table.insert(parts, "\u{26A1} Vitesse " .. fmtTime(shopMeta.speedUntil - now))
+                end
+                if (shopMeta.luckUntil or 0) > now then
+                    table.insert(parts, "\u{1F340} Chance " .. fmtTime(shopMeta.luckUntil - now))
+                end
+                shopStatus.Text = (#parts > 0) and ("Bonus actifs : " .. table.concat(parts, "   |   ")) or "Aucun bonus actif"
+            end
+        end
+    end)
+
+    -- ---------- mondes ----------
+    local function refreshWorlds()
+        for _, c in ipairs(worldScroll:GetChildren()) do
+            if c:IsA("Frame") then c:Destroy() end
+        end
+        for i, w in ipairs(worldList) do
+            local row = Instance.new("Frame")
+            row.LayoutOrder = i
+            row.Size = UDim2.new(1, -8, 0, 80)
+            row.BackgroundColor3 = w.unlocked and Color3.fromRGB(35, 55, 45) or Color3.fromRGB(55, 40, 40)
+            row.ZIndex = 6
+            makeCorner(row, 12)
+            row.Parent = worldScroll
+
+            local nameL = Instance.new("TextLabel")
+            nameL.Size = UDim2.new(1, -150, 0, 30)
+            nameL.Position = UDim2.new(0, 14, 0, 10)
+            nameL.BackgroundTransparency = 1
+            nameL.Text = "Monde " .. i .. " - " .. (w.name or "")
+            nameL.TextColor3 = WHITE
+            nameL.Font = Enum.Font.GothamBold
+            nameL.TextSize = 17
+            nameL.TextXAlignment = Enum.TextXAlignment.Left
+            nameL.ZIndex = 7
+            nameL.Parent = row
+
+            local infoL = Instance.new("TextLabel")
+            infoL.Size = UDim2.new(1, -150, 0, 32)
+            infoL.Position = UDim2.new(0, 14, 0, 42)
+            infoL.BackgroundTransparency = 1
+            local needRb = w.rebirth or 0
+            local myRb = state.rebirthLevel or 0
+            local infoText = "Debloque"
+            if not w.unlocked then
+                infoText = "Prix : " .. fmtNum(w.unlock) .. " coins (une fois)"
+                if needRb > 0 then
+                    infoText = infoText .. "  +  " .. needRb .. " renaissance(s) (tu en as " .. myRb .. ")"
+                end
+            end
+            infoL.Text = infoText
+            infoL.TextColor3 = w.unlocked and Color3.fromRGB(120, 255, 160) or Color3.fromRGB(255, 200, 120)
+            infoL.Font = Enum.Font.Gotham
+            infoL.TextSize = 12
+            infoL.TextWrapped = true
+            infoL.TextYAlignment = Enum.TextYAlignment.Top
+            infoL.TextXAlignment = Enum.TextXAlignment.Left
+            infoL.ZIndex = 7
+            infoL.Parent = row
+
+            local go = Instance.new("TextButton")
+            go.Size = UDim2.new(0, 120, 0, 40)
+            go.Position = UDim2.new(1, -132, 0.5, -20)
+            go.BackgroundColor3 = w.unlocked and Color3.fromRGB(50, 150, 90) or Color3.fromRGB(200, 140, 40)
+            go.Text = w.unlocked and "Y aller" or "Debloquer"
+            go.TextColor3 = WHITE
+            go.Font = Enum.Font.GothamBold
+            go.TextSize = 15
+            go.ZIndex = 7
+            makeCorner(go, 8)
+            go.Parent = row
+            go.MouseButton1Click:Connect(function()
+                WorldTeleport:FireServer(i)
+                worldPanel.Visible = false
+            end)
+        end
+    end
+
+    WorldInfoRemote.OnClientEvent:Connect(function(list)
+        worldList = list or {}
+        if worldPanel.Visible then refreshWorlds() end
+    end)
+
+    -- ---------- boutons ----------
+    local shopBtn = makeBtn("\u{1F6D2} Shop", 145, 80, Color3.fromRGB(0, 150, 90))
+    local worldsBtn = makeBtn("\u{1F30D} Mondes", 145, 135, Color3.fromRGB(50, 130, 200))
+    local bestBtn = makeBtn("\u{2B50} Meilleurs", 145, 190, Color3.fromRGB(200, 150, 40))
+    local boostBtn = makeBtn("\u{26A1} Boost 500", 145, 245, Color3.fromRGB(60, 160, 200))
+
+    shopBtn.MouseButton1Click:Connect(function()
+        local show = not shopPanel.Visible
+        closeOthers(show and shopPanel or nil)
+        shopPanel.Visible = show
+        if show then
+            refreshShop()
+            ShopBuy:FireServer("__info")
+        end
+    end)
+    worldsBtn.MouseButton1Click:Connect(function()
+        local show = not worldPanel.Visible
+        closeOthers(show and worldPanel or nil)
+        worldPanel.Visible = show
+        if show then
+            refreshWorlds()
+            ShopBuy:FireServer("__info")
+        end
+    end)
+    bestBtn.MouseButton1Click:Connect(function() EquipBest:FireServer() end)
+    boostBtn.MouseButton1Click:Connect(function() BuySpeed:FireServer() end)
+
+    -- les anciens boutons ferment aussi les nouveaux panneaux
+    for _, b in ipairs({ invButton, eggButton, combatButton }) do
+        b.MouseButton1Click:Connect(function()
+            shopPanel.Visible = false
+            worldPanel.Visible = false
+        end)
+    end
+end
+
+print("[MWS] Client initialise (avec combat + renaissance) !")
