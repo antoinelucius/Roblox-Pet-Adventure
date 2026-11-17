@@ -3611,25 +3611,42 @@ do
         section("CADEAU DU JOUR", GREEN)
         local gift = card(d.claimed and 84 or 132)
         local row = new("Frame", { Size = UDim2.new(1, -20, 0, 62), Position = UDim2.new(0, 10, 0, 11), BackgroundTransparency = 1, ZIndex = 7 }, gift)
+        -- jours forts (une potion en plus des coins) : case violette dont le contour clignote
+        local bonus = d.bonus or {}
+        local PURPLE, PINK = Color3.fromRGB(140, 80, 225), Color3.fromRGB(255, 170, 255)
         for i = 1, 7 do
             local taken = i < d.index or (i == d.index and d.claimed)
             local today = i == d.index and not d.claimed
+            local strong = bonus[i] and not taken
             local box = new("Frame", {
                 Size = UDim2.new(1 / 7, -6, 1, 0), Position = UDim2.new((i - 1) / 7, 3, 0, 0),
-                BackgroundColor3 = today and Color3.fromRGB(230, 165, 30) or (taken and Color3.fromRGB(35, 120, 60) or Color3.fromRGB(46, 48, 64)),
+                BackgroundColor3 = today and Color3.fromRGB(230, 165, 30) or (taken and Color3.fromRGB(35, 120, 60) or (strong and PURPLE or Color3.fromRGB(46, 48, 64))),
                 ZIndex = 8,
             }, row)
             makeCorner(box, 8)
-            if today then new("UIStroke", { Color = Color3.fromRGB(255, 235, 140), Thickness = 2 }, box) end
-            inked(new("TextLabel", { Size = UDim2.new(1, 0, 0, 22), Position = UDim2.new(0, 0, 0, 5), BackgroundTransparency = 1, Text = "J" .. i, TextColor3 = WHITE, Font = Enum.Font.FredokaOne, TextSize = 15, ZIndex = 9 }, box))
+            if today or strong then
+                local stroke = new("UIStroke", { Color = strong and PINK or Color3.fromRGB(255, 235, 140), Thickness = 2 }, box)
+                if strong then
+                    local pulse = TweenService:Create(stroke, TweenInfo.new(0.7, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1, true), { Transparency = 0.75 })
+                    pulse:Play()
+                    box.Destroying:Connect(function() pulse:Cancel() end)
+                end
+            end
+            inked(new("TextLabel", { Size = UDim2.new(1, 0, 0, 22), Position = UDim2.new(0, 0, 0, strong and 2 or 5), BackgroundTransparency = 1, Text = "J" .. i, TextColor3 = WHITE, Font = Enum.Font.FredokaOne, TextSize = 15, ZIndex = 9 }, box))
             inked(new("TextLabel", {
-                Size = UDim2.new(1, -4, 0, 22), Position = UDim2.new(0, 2, 0, 32), BackgroundTransparency = 1,
+                Size = UDim2.new(1, -4, 0, strong and 18 or 22), Position = UDim2.new(0, 2, 0, strong and 23 or 32), BackgroundTransparency = 1,
                 Text = taken and "\u{2714}" or fmtShort(d.rewards[i]), TextColor3 = taken and WHITE or Color3.fromRGB(140, 255, 160),
                 Font = Enum.Font.FredokaOne, TextSize = 14, TextScaled = true, ZIndex = 9,
             }, box))
+            if strong then
+                inked(new("TextLabel", {
+                    Size = UDim2.new(1, -4, 0, 16), Position = UDim2.new(0, 2, 0, 43), BackgroundTransparency = 1,
+                    Text = "+ POTION", TextColor3 = WHITE, Font = Enum.Font.FredokaOne, TextSize = 12, TextScaled = true, ZIndex = 9,
+                }, box))
+            end
         end
         if not d.claimed then
-            dailyBtn = claimButton(gift, "Récupérer +" .. fmtShort(d.rewards[d.index]), function() MetaAction:FireServer("daily") end)
+            dailyBtn = claimButton(gift, "Récupérer +" .. fmtShort(d.rewards[d.index]) .. (bonus[d.index] and " + potion" or ""), function() MetaAction:FireServer("daily") end)
             dailyBtn.AnchorPoint = Vector2.new(0.5, 1)
             dailyBtn.Position = UDim2.new(0.5, 0, 1, -10)
             dailyBtn.Size = UDim2.new(1, -20, 0, 40)
