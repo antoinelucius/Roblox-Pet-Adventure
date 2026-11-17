@@ -210,6 +210,8 @@ local PHRASES = {
 	{ "Cet article n'est disponible que dans le monde ", "This item is only available in world " },
 	{ "Limite atteinte : un seul exemplaire par joueur !", "Limit reached: only one per player!" },
 	{ "Ton inventaire est plein : libere une place avant d'acheter ce pet.", "Your inventory is full: free a slot before buying this pet." },
+	{ "Ta partie est deja ouverte ailleurs (autre appareil ou Studio). Ferme-la : elle se chargera ici toute seule.", "Your game is already open somewhere else (another device or Studio). Close it: it will load here by itself." },
+	{ "Ta sauvegarde se charge encore : attends quelques secondes.", "Your save is still loading: wait a few seconds." },
 	{ "Tu possedes deja cet article !", "You already own this item!" },
 	{ "Ton boost de vitesse est deja actif !", "Your speed boost is already active!" },
 	{ " coins pour acheter le boost !", " coins to buy the boost!" }, { "Boost de vitesse x", "Speed boost x" },

@@ -1577,13 +1577,15 @@ local Saves = {
 	meta = setmetatable({}, { __mode = "k" }), -- etat du joueur -> { session, version, saved (recus durables), released, lost }
 	busy = {},                                 -- UserId -> ecriture en cours
 	LOCK_TTL = 180,                            -- verrou perime apres 3 min sans sauvegarde (serveur plante)
+	CLAIM_TRIES = 62,                          -- essais toutes les 3 s : on attend au moins la fin d'un verrou perime
+	waitNotice = {},                           -- UserId -> dernier message "sauvegarde pas encore chargee"
 }
 
 -- Prend le verrou du profil et renvoie (donnees, session, version). Renvoie nil si le profil
 -- reste verrouille ou illisible : on ne cree alors PAS de sauvegarde vide.
 function Saves.claim(player)
 	local session = game:GetService("HttpService"):GenerateGUID(false)
-	for attempt = 1, 10 do
+	for attempt = 1, Saves.CLAIM_TRIES do
 		local data, locked
 		local ok, err = pcall(function()
 			_G.MWS_Store:UpdateAsync("player_" .. player.UserId, function(current)
@@ -1603,11 +1605,23 @@ function Saves.claim(player)
 		if ok and data then return data, session, data.saveVersion end
 		if not ok then
 			warn("[MWS] Echec de chargement (essai " .. attempt .. ") pour " .. player.UserId .. ": " .. tostring(err))
+		elseif locked then
+			-- la partie est encore ouverte ailleurs (autre appareil, autre serveur ou test dans Studio) :
+			-- on le dit au joueur et on charge des que l'autre session rend le verrou
+			notify(player, "Ta partie est deja ouverte ailleurs (autre appareil ou Studio). Ferme-la : elle se chargera ici toute seule.", Color3.fromRGB(255, 200, 90))
 		end
 		if not player.Parent then return nil end
 		task.wait(3)
 	end
 	return nil
+end
+
+-- action demandee avant la fin du chargement : on le dit au lieu de ne rien faire (1 message / 3 s)
+function Saves.notLoaded(player)
+	local last = Saves.waitNotice[player.UserId]
+	if last and os.clock() - last < 3 then return end
+	Saves.waitNotice[player.UserId] = os.clock()
+	notify(player, "Ta sauvegarde se charge encore : attends quelques secondes.", Color3.fromRGB(255, 200, 90))
 end
 
 -- Rend le verrou d'un joueur parti pendant son chargement
@@ -3367,7 +3381,7 @@ local function createEggsForWorld(w)
 		local lastBuy = {}
 		prompt.Triggered:Connect(function(player)
 			local s = states[player.UserId]
-			if not s then return end
+			if not s then Saves.notLoaded(player) return end
 			if lastBuy[player] and os.clock() - lastBuy[player] < 0.6 then return end
 			-- une seule eclosion a la fois : on attend la fin de l'animation en cours
 			if s.hatchBusyUntil and os.clock() < s.hatchBusyUntil then return end
@@ -5485,7 +5499,7 @@ do
 		if shopBuyAt[player.UserId] and now - shopBuyAt[player.UserId] < 0.5 then return end
 		shopBuyAt[player.UserId] = now
 		local s = states[player.UserId]
-		if not s then return end
+		if not s then Saves.notLoaded(player) return end
 		if key == "__info" then
 			sendWorldInfo(player)
 			task.spawn(sendShopInfo, player)
