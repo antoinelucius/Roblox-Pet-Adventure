@@ -216,6 +216,7 @@ end
 
 local blur = Lighting:FindFirstChild("MWS_MenuBlur") or new("BlurEffect", { Name = "MWS_MenuBlur", Size = 0 }, Lighting)
 local panels = {}
+local bounces = {}   -- animation d'ouverture en cours de chaque menu (annulee si on le rouvre vite)
 -- flou seulement si un vrai menu est ouvert et affiche (pas l'argent, le fondu de changement
 -- de monde ni les ecrans plein ecran, qui laissaient le flou bloque)
 local function updateBlur()
@@ -400,12 +401,14 @@ local function stylePanel(frame)
 		local nowVisible = frame.Visible
 		if nowVisible and not wasVisible then
 			sound("open", 0.25, 1.35)
-			-- rebond : la taille finale est celle choisie par MWS_MobileHud sur telephone (meme UIScale)
+			-- rebond : on revient toujours a la taille de repos (attribut Rest, pose par MWS_MobileHud
+			-- sur telephone ; 1 sur PC), jamais a la valeur du moment, qui peut etre en pleine animation
 			task.defer(function()
 				local scale = frame:FindFirstChild("MWS_Fit") or new("UIScale", { Name = "MWS_Fit" }, frame)
-				local target = scale.Scale
+				local target = scale:GetAttribute("Rest") or 1
+				if bounces[frame] then bounces[frame]:Cancel() end
 				scale.Scale = target * 0.6
-				tween(scale, 0.3, { Scale = target }, Enum.EasingStyle.Back)
+				bounces[frame] = tween(scale, 0.3, { Scale = target }, Enum.EasingStyle.Back)
 			end)
 		elseif wasVisible and not nowVisible then
 			sound("close", 0.3)

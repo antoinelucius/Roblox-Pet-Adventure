@@ -170,6 +170,8 @@ local function fit(frame)
 		local k = math.min(1, w / groupWidth, h / height)
 		if not best or k > best then best, zoneWidth, zoneHeight, zone = k, w, h, candidate end
 	end
+	-- taille de repos gardee a part : l'animation d'ouverture (MWS_Style) revient toujours a celle-ci
+	fitScale(frame):SetAttribute("Rest", best)
 	fitScale(frame).Scale = best
 	local groupLeft = zone.left + (zoneWidth - groupWidth * best) / 2
 	local centerY = zone.top + zoneHeight / 2
